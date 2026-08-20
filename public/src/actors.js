@@ -28,6 +28,7 @@ export class Actor {
     this.frozen = false;
     this.phase = 0;         // animation clock
     this.squash = 0;        // >0 right after landing
+    this.idleT = 0;         // ticks standing still on the ground (render-only)
     this.deathT = 0;
   }
 
@@ -40,7 +41,7 @@ export class Actor {
   tick(mask) {
     const ev = { jumped: false, landed: false, step: false };
     if (!this.alive) { this.deathT++; return ev; }
-    if (this.frozen) { this.phase += 0.02; return ev; }
+    if (this.frozen) { this.phase += 0.02; this.idleT++; return ev; }
     const w = this.world;
 
     // horizontal
@@ -121,6 +122,7 @@ export class Actor {
     // animation clock
     this.phase += this.grounded && Math.abs(this.vx) > 0.3 ? 0.35 : 0.06;
     if (this.squash > 0) this.squash--;
+    if (this.grounded && Math.abs(this.vx) < 0.05) this.idleT++; else this.idleT = 0;
     if (this.grounded && Math.abs(this.vx) > 0.3 && (Math.floor(this.phase * 2) % 6 === 0)) ev.step = true;
     return ev;
   }
@@ -147,7 +149,8 @@ export function drawCat(ctx, cx, cy, face, phase, vy, o = {}) {
   else ctx.globalAlpha = a;
   ctx.scale(sx, sy);
 
-  const bob = o.husk ? 0 : o.running ? Math.sin(phase * 2) * 1.5 : Math.sin(phase) * 0.8;
+  const sit = !!o.idle && !o.husk;
+  const bob = o.husk ? 0 : sit ? Math.sin(phase * 0.45) * 0.55 : o.running ? Math.sin(phase * 2) * 1.5 : Math.sin(phase) * 0.8;
   const bodyFill = o.husk ? '#232c3a' : o.remote ? 'rgba(255,210,140,0.16)' : o.ghost ? 'rgba(140,230,255,0.20)' : '#0c1018';
   const rim = o.husk ? 'rgba(110,125,150,0.45)' : o.remote ? 'rgba(255,205,130,0.8)' : o.ghost ? 'rgba(150,235,255,0.85)' : 'rgba(110,210,255,0.35)';
 
@@ -156,38 +159,64 @@ export function drawCat(ctx, cx, cy, face, phase, vy, o = {}) {
   ctx.fillStyle = bodyFill;
   if (o.ghost || o.frozen) { ctx.shadowColor = o.remote ? '#ffc87a' : '#7fe3ff'; ctx.shadowBlur = 12; }
 
-  // tail
-  const tw = Math.sin(phase * (o.running ? 2 : 1)) * 6;
+  // tail — curls forward around the paws when sitting
+  const tw = sit ? Math.sin(phase * 0.3) * 2 : Math.sin(phase * (o.running ? 2 : 1)) * 6;
   ctx.beginPath();
-  ctx.moveTo(-9, -8 + bob * 0.5);
-  ctx.bezierCurveTo(-16, -12 + bob, -20 + tw, -22, -15 + tw, -28);
+  if (sit) {
+    ctx.moveTo(-7, -4 + bob * 0.4);
+    ctx.bezierCurveTo(-13, 0, -3, 0.5, 9 + tw, -3 - tw);
+  } else {
+    ctx.moveTo(-9, -8 + bob * 0.5);
+    ctx.bezierCurveTo(-16, -12 + bob, -20 + tw, -22, -15 + tw, -28);
+  }
   ctx.stroke();
 
   // body
   ctx.beginPath();
-  ctx.ellipse(-1, -7 + bob * 0.4, 11, 7.5, 0, 0, Math.PI * 2);
+  if (sit) {
+    const t = -17 + bob;
+    ctx.moveTo(1.5, t);
+    ctx.bezierCurveTo(-9, t + 1.5, -12.5, -3, -7, 0.5);
+    ctx.lineTo(5, 0.5);
+    ctx.bezierCurveTo(9.5, -5, 8, -14 + bob, 1.5, t);
+    ctx.closePath();
+  } else {
+    ctx.ellipse(-1, -7 + bob * 0.4, 11, 7.5, 0, 0, Math.PI * 2);
+  }
   ctx.fill();
   ctx.stroke();
 
   // head
-  const hx = 7, hy = -16 + bob;
+  const hx = sit ? 4 : 7, hy = (sit ? -21 : -16) + bob;
   ctx.beginPath();
   ctx.arc(hx, hy, 7.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  // ears
+  // ears — pinned flat and wide when something is watching
   ctx.beginPath();
-  ctx.moveTo(hx - 6, hy - 3);
-  ctx.lineTo(hx - 5, hy - 12);
-  ctx.lineTo(hx - 0.5, hy - 6.5);
+  if (o.wary) {
+    ctx.moveTo(hx - 3.5, hy - 6.5);
+    ctx.lineTo(hx - 13, hy - 4);
+    ctx.lineTo(hx - 6.5, hy - 0.5);
+  } else {
+    ctx.moveTo(hx - 6, hy - 3);
+    ctx.lineTo(hx - 5, hy - 12);
+    ctx.lineTo(hx - 0.5, hy - 6.5);
+  }
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(hx + 1, hy - 6.5);
-  ctx.lineTo(hx + 4, hy - 12.5);
-  ctx.lineTo(hx + 7, hy - 4);
+  if (o.wary) {
+    ctx.moveTo(hx + 1.5, hy - 7);
+    ctx.lineTo(hx + 11.5, hy - 5.5);
+    ctx.lineTo(hx + 6.5, hy - 2);
+  } else {
+    ctx.moveTo(hx + 1, hy - 6.5);
+    ctx.lineTo(hx + 4, hy - 12.5);
+    ctx.lineTo(hx + 7, hy - 4);
+  }
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
@@ -223,7 +252,7 @@ export function drawCat(ctx, cx, cy, face, phase, vy, o = {}) {
   }
 
   // legs (simple run cycle)
-  if (o.grounded && !o.dead) {
+  if (o.grounded && !o.dead && !sit) {
     ctx.strokeStyle = rim;
     ctx.lineWidth = 2;
     const lp = o.running ? Math.sin(phase * 2) * 3 : 0;

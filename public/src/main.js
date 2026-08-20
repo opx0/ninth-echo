@@ -1,4 +1,4 @@
-import { LEVELS, ENDINGS, LIVES, TILE, MOODS } from './levels.js';
+import { LEVELS, ENDINGS, NARRATOR, LIVES, TILE, MOODS } from './levels.js';
 import { World, LOOP_TICKS } from './world.js';
 import { Actor, drawCat, L, R, J } from './actors.js';
 import * as r3d from './render3d.js';
@@ -53,12 +53,18 @@ let lastWarnSec = -1;
 let noLivesFlash = 0;
 let hitStop = 0, deathFlash = 0;
 
-let rewindPos = 0, rewindStep = 1;
+let rewindPos = 0, rewindStep = 1, rewindLine = '';
 let clearT = 0, clearKind = 'next';
 let failT = 0;
-let storyChars = 0;
+let storyChars = 0, storyT = 0;
 let endingKind = 'break', endChars = 0;
+let endLines = /** @type {string[]} */ ([]);
 let mapSel = 0;
+
+let livesSpent = 0;                     // lives left behind across the whole descent
+let epiText = '', epiAlpha = 0;         // husk epitaph, faded by proximity
+let shardText = '', shardT = 0;
+let vigilT = 0, vigilChars = 0, vigilSeen = false;
 
 let unlocked = Math.min(parseInt(localStorage.getItem('ninthecho_unlocked') || '0', 10), LEVELS.length - 1);
 mapSel = unlocked;
@@ -98,6 +104,8 @@ function enterLevel(idx) {
   ghosts = [];
   lives = LIVES;
   storyChars = 0;
+  storyT = 0;
+  epiAlpha = 0;
   totalTicks = 0;
   submitted = false;
   nameChars = '';
@@ -109,7 +117,14 @@ function enterLevel(idx) {
     console.log('world echoes loaded:', worldEchoes.map(se => se.name).join(','));
   }).catch(e => console.error('echo load failed', e));
   newLoop();
-  state = 'story';
+  // the spent lives come with you into the heart — once per run
+  if (LEVELS[idx].finale && !vigilSeen) {
+    vigilSeen = true;
+    vigilT = 0;
+    vigilChars = 0;
+    sfxSafe(() => sfx.meow());
+    state = 'vigil';
+  } else state = 'story';
 }
 
 function newLoop() {
@@ -128,6 +143,10 @@ function newLoop() {
 
 function startRewind() {
   if (history.length === 0) { finishRewind(); return; }
+  // one narrator line, chosen now, held for the whole rewind
+  rewindLine = player.alive
+    ? NARRATOR.rewind[Math.min(8, LIVES - lives)]
+    : NARRATOR.death[ghosts.length % NARRATOR.death.length];
   rewindPos = history.length - 1;
   rewindStep = Math.max(2, Math.ceil(history.length / 40));
   sfxSafe(() => sfx.rewind());
@@ -160,10 +179,13 @@ Object.defineProperty(window, 'NL', { value: {
 function tick() {
   globalT++;
   if (hitStop > 0) { hitStop--; return; }   // impact freeze on death
+  if (shardT > 0) shardT--;
 
   if (state === 'title') {
     if (wasPressed('Enter') || wasPressed('Space')) {
       sfxSafe(() => sfx.meow());
+      livesSpent = 0;
+      vigilSeen = false;
       state = 'map';
     }
   } else if (state === 'map') {
@@ -171,11 +193,21 @@ function tick() {
     if (wasPressed('ArrowLeft') || wasPressed('KeyA')) { mapSel = Math.max(0, mapSel - 1); sfxSafe(() => sfx.step()); loadBoardFor(mapSel); }
     if (wasPressed('ArrowRight') || wasPressed('KeyD')) { mapSel = Math.min(unlocked, mapSel + 1); sfxSafe(() => sfx.step()); loadBoardFor(mapSel); }
     if (wasPressed('Enter') || wasPressed('Space')) { sfxSafe(() => sfx.plateOn()); enterLevel(mapSel); }
+  } else if (state === 'vigil') {
+    vigilT++;
+    if (vigilT > VIGIL_HOLD) vigilChars += 1.1;
+    const total = NARRATOR.vigil.join('').length;
+    if (wasPressed('Enter') || wasPressed('Space')) {
+      if (vigilChars < total) { vigilT = Math.max(vigilT, VIGIL_HOLD); vigilChars = total; }
+      else { storyT = 0; storyChars = 0; state = 'story'; }
+    }
   } else if (state === 'story') {
-    storyChars += 1.2;
+    storyT++;
+    const hold = LEVELS[levelIdx].finale ? CARD_HOLD_FINALE : CARD_HOLD;
+    if (storyT > hold) storyChars += 1.2;
     const total = LEVELS[levelIdx].story.join('').length;
     if (wasPressed('Enter') || wasPressed('Space') || wasPressed('KeyR')) {
-      if (storyChars < total) storyChars = total;
+      if (storyChars < total) { storyT = Math.max(storyT, hold); storyChars = total; }
       else state = 'play';
     }
   } else if (state === 'play') {
@@ -202,6 +234,7 @@ function tick() {
     }
     if (!submitted) {
       submitted = true;
+      livesSpent += LIVES - lives + 1;   // banked once — `submitted` holds for the whole clear screen
       const runs = ghosts.map(g => g.rec.slice(0, g.len));
       runs.push(recording.slice(0, recLen));
       submitClear({
@@ -216,6 +249,9 @@ function tick() {
     if (clearT > 140) {
       if (LEVELS[levelIdx].finale) {
         endingKind = clearKind === 'stay' ? 'stay' : clawCount() === 3 ? 'sever' : 'break';
+        endLines = ENDINGS[endingKind].map(l => l
+          .replace(/\{spent\} lives/g, livesSpent === 1 ? '1 life' : `${livesSpent} lives`)
+          .replace(/\{spent\}/g, String(livesSpent)));
         endChars = 0;
         state = 'ending';
       } else {
@@ -233,7 +269,7 @@ function tick() {
     if (failT > 130) resetRoom();
   } else if (state === 'ending') {
     endChars += 0.9;
-    const total = ENDINGS[endingKind].join('').length;
+    const total = endLines.join('').length;
     if (wasPressed('Enter') || wasPressed('Space')) {
       if (endChars < total) endChars = total;
       else { state = 'title'; mapSel = unlocked; }
@@ -345,6 +381,8 @@ function tickPlay() {
     const rx = world.relic.c * TILE, ry = world.relic.r * TILE;
     if (player.x < rx + TILE && player.x + player.w > rx && player.y < ry + TILE && player.y + player.h > ry) {
       world.relicTaken = true;
+      shardText = LEVELS[levelIdx].shard || '';
+      shardT = SHARD_TICKS;
       claw |= 1 << levelIdx;
       localStorage.setItem('ninthecho_claw', String(claw));
       r3d.collectRelic();
@@ -405,6 +443,7 @@ function draw() {
 
   if (state === 'title') drawTitle();
   else if (state === 'map') drawMap();
+  else if (state === 'vigil') drawVigil();
   else if (state === 'story') drawStory();
   else if (state === 'ending') drawEnding();
   else drawScene();
@@ -441,25 +480,27 @@ function drawScene() {
     }
     r3d.streaks();
   } else {
+    // every cat in the chamber flinches while a warden's gaze is winding up
+    const wary = world.beamPhase(loopTick).some(b => b.warn);
     for (const se of worldEchoes) {
       const a = se.actors[se.actors.length - 1];
       if (!a || !a.alive) continue;
       cats.push({
         x: a.x + a.w / 2, y: a.y + a.h, face: a.face, phase: a.phase, vy: a.vy, z: 3,
-        opts: { ghost: true, remote: true, frozen: a.frozen, grounded: a.grounded, running: a.grounded && Math.abs(a.vx) > 0.3, alpha: 0.34 },
+        opts: { ghost: true, remote: true, frozen: a.frozen, grounded: a.grounded, running: a.grounded && Math.abs(a.vx) > 0.3, idle: a.idleT > 90, wary, alpha: 0.34 },
       });
     }
     ghostActors.forEach(a => {
       if (!a.alive && a.deathT > 40) return;
       cats.push({
         x: a.x + a.w / 2, y: a.y + a.h, face: a.face, phase: a.phase, vy: a.vy,
-        opts: { ghost: true, frozen: a.frozen, dead: !a.alive, deathT: a.deathT, squash: a.squash, grounded: a.grounded, running: a.grounded && Math.abs(a.vx) > 0.3, alpha: a.frozen ? 0.62 : 0.5 },
+        opts: { ghost: true, frozen: a.frozen, dead: !a.alive, deathT: a.deathT, squash: a.squash, grounded: a.grounded, running: a.grounded && Math.abs(a.vx) > 0.3, idle: a.idleT > 90, wary, alpha: a.frozen ? 0.62 : 0.5 },
       });
     });
     if (player.alive || player.deathT <= 40) {
       cats.push({
         x: player.x + player.w / 2, y: player.y + player.h, face: player.face, phase: player.phase, vy: player.vy,
-        opts: { dead: !player.alive, deathT: player.deathT, squash: player.squash, grounded: player.grounded, running: player.grounded && Math.abs(player.vx) > 0.3, alpha: 1 },
+        opts: { dead: !player.alive, deathT: player.deathT, squash: player.squash, grounded: player.grounded, running: player.grounded && Math.abs(player.vx) > 0.3, idle: player.idleT > 90, wary, alpha: 1 },
       });
     }
   }
@@ -477,7 +518,47 @@ function drawScene() {
     ctx.fillStyle = 'rgba(160,240,255,0.9)';
     ctx.font = '28px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('\u27f2  a life stays behind', W / 2, H / 2 - 100);
+    ctx.fillText('\u27f2  ' + rewindLine, W / 2, H / 2 - 100);
+  }
+
+  // husk epitaphs \u2014 the dead speak when you stand close enough to read them
+  let nearEpi = '';
+  if (state === 'play') {
+    const pcx = player.x + player.w / 2, pcy = player.y + player.h / 2;
+    for (const h of (world.def.husks || [])) {
+      const line = h[2];
+      if (typeof line !== 'string') continue;
+      const hx = Number(h[0]) * TILE + TILE / 2, hy = Number(h[1]) * TILE + TILE / 2;
+      if (Math.hypot(pcx - hx, pcy - hy) < TILE * 2.5) { nearEpi = line; break; }
+    }
+  }
+  if (nearEpi) epiText = nearEpi;
+  epiAlpha += ((nearEpi ? 1 : 0) - epiAlpha) * 0.09;
+  if (epiText && epiAlpha > 0.02) {
+    ctx.font = 'italic 15px Georgia, serif';
+    ctx.textAlign = 'center';
+    // the chamber glow sits right at floor level, so the inscription needs its own dark
+    const wide = ctx.measureText(epiText).width / 2 + 40;
+    const scrim = ctx.createLinearGradient(W / 2 - wide, 0, W / 2 + wide, 0);
+    scrim.addColorStop(0, 'rgba(6,9,16,0)');
+    scrim.addColorStop(0.5, `rgba(6,9,16,${epiAlpha * 0.78})`);
+    scrim.addColorStop(1, 'rgba(6,9,16,0)');
+    ctx.fillStyle = scrim;
+    ctx.fillRect(W / 2 - wide, H - 66, wide * 2, 28);
+    ctx.fillStyle = `rgba(214,224,240,${epiAlpha * 0.92})`;
+    ctx.fillText(epiText, W / 2, H - 47);
+  }
+
+  // claw shard, named as it is taken
+  if (shardText && shardT > 0) {
+    ctx.save();
+    ctx.font = '17px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(255,216,160,${Math.min(1, Math.min(shardT, SHARD_TICKS - shardT) / 30)})`;
+    ctx.shadowColor = '#ffc060';
+    ctx.shadowBlur = 10;
+    ctx.fillText(shardText, W / 2, H / 2 - 60);
+    ctx.restore();
   }
 
   drawHud();
@@ -516,10 +597,10 @@ function drawScene() {
     ctx.fillStyle = '#ff9f9f';
     ctx.font = '30px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('THE LOOM RECLAIMS YOU', W / 2, H / 2 - 10);
+    ctx.fillText(NARRATOR.fail.title, W / 2, H / 2 - 10);
     ctx.font = '16px monospace';
     ctx.fillStyle = '#c9a8b8';
-    ctx.fillText('nine lives, restored. it is patient.', W / 2, H / 2 + 24);
+    ctx.fillText(NARRATOR.fail.sub, W / 2, H / 2 + 24);
     ctx.globalAlpha = 1;
   }
 }
@@ -893,18 +974,94 @@ function typewriterLines(lines, chars, y0, lineH, font, color) {
   });
 }
 
+const CARD_HOLD = 55, CARD_HOLD_FINALE = 150, SHARD_TICKS = 240, VIGIL_HOLD = 90;
+
 function drawStory() {
   r3d.renderMenu(globalT);
-  ctx.fillStyle = 'rgba(4,6,12,0.68)';
+  const lv = LEVELS[levelIdx];
+  const hold = lv.finale ? CARD_HOLD_FINALE : CARD_HOLD;
+  const k = Math.min(1, Math.max(0, (storyT - hold) / 30));
+  const s = k * k * (3 - 2 * k);      // 0 = card holds the screen, 1 = settled header
+  ctx.fillStyle = `rgba(4,6,12,${lv.finale ? 0.8 : 0.68})`;
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = 'rgba(150,200,240,0.5)';
-  ctx.font = '14px monospace';
+
+  // the canto card, inked like the atlas — holds, then settles upward
+  ctx.save();
+  ctx.translate(W / 2, 236 - s * 132);
+  ctx.scale(1 - s * 0.36, 1 - s * 0.36);
   ctx.textAlign = 'center';
-  ctx.fillText(`chamber ${levelIdx + 1} — ${LEVELS[levelIdx].name}`, W / 2, 120);
-  typewriterLines(LEVELS[levelIdx].story, storyChars, 220, 40, '19px monospace', '#cfeaff');
-  ctx.fillStyle = `rgba(180,220,250,${0.4 + Math.sin(globalT * 0.06) * 0.3})`;
+  if (lv.canto) {
+    ctx.fillStyle = 'rgba(150,170,195,0.55)';
+    ctx.font = '13px Georgia, serif';
+    ctx.fillText(lv.canto.split('').join(' '), 0, -50);
+  }
+  ctx.fillStyle = lv.finale ? '#e8d6c0' : '#cfdcec';
+  ctx.font = `${lv.finale ? 42 : 34}px Georgia, serif`;
+  const title = lv.title || lv.name;
+  const half = ctx.measureText(title).width / 2;
+  ctx.fillText(title, 0, 0);
+  ctx.strokeStyle = 'rgba(170,190,215,0.4)';
+  ctx.lineWidth = 1;
+  for (const dir of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(dir * (half + 22), -11);
+    ctx.lineTo(dir * (half + 96), -11);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(dir * (half + 104), -11, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (lv.region) {
+    // the region phrase belongs to the held card; it is unreadable once shrunk
+    ctx.fillStyle = `rgba(150,170,195,${0.5 * (1 - s)})`;
+    ctx.font = 'italic 14px Georgia, serif';
+    ctx.fillText(lv.region, 0, 32);
+  }
+  ctx.restore();
+
+  if (s > 0) {
+    ctx.globalAlpha = s;
+    if (!lv.finale) {
+      ctx.fillStyle = 'rgba(150,200,240,0.5)';
+      ctx.font = '14px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`chamber ${levelIdx + 1} — ${lv.name}`, W / 2, 172);
+    }
+    typewriterLines(lv.story, storyChars, 244, 40, '19px monospace', '#cfeaff');
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = `rgba(180,220,250,${(0.4 + Math.sin(globalT * 0.06) * 0.3) * (lv.finale ? s : 1)})`;
   ctx.font = '13px monospace';
   ctx.fillText('ENTER', W / 2, H - 60);
+}
+
+// the vigil: every life you spent walks in with you
+function drawVigil() {
+  r3d.renderMenu(globalT);
+  ctx.fillStyle = 'rgba(3,5,10,0.82)';
+  ctx.fillRect(0, 0, W, H);
+
+  const n = Math.max(3, Math.min(8, livesSpent));
+  for (let i = 0; i < n; i++) {
+    const k = Math.min(1, (vigilT - 20 - i * 26) / 200);
+    if (k <= 0) continue;
+    const x0 = W / 2 + (i % 2 ? 1 : -1) * (100 + (i >> 1) * 78);
+    const x = x0 + (W / 2 - x0) * k * 0.55;
+    const y = H + 40 - k * H * 0.42 + Math.sin(globalT * 0.02 + i) * 4;
+    drawCat(ctx, x, y, x < W / 2 ? 1 : -1, globalT * 0.03 + i, 0,
+      { ghost: true, alpha: 0.45 * Math.min(1, k * 4), grounded: true });
+  }
+
+  typewriterLines(NARRATOR.vigil, vigilChars, 118, 34, '18px monospace', '#dfeaff');
+  const total = NARRATOR.vigil.join('').length;
+  if (vigilChars > total + 70) {   // a beat of silence first
+    ctx.fillStyle = `rgba(180,220,250,${0.4 + Math.sin(globalT * 0.06) * 0.3})`;
+    ctx.font = '13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('ENTER', W / 2, H - 40);
+  }
 }
 
 function drawEnding() {
@@ -937,8 +1094,8 @@ function drawEnding() {
     ctx.restore();
   }
 
-  typewriterLines(ENDINGS[endingKind], endChars, 80, 26, '16px monospace', '#dff2ff');
-  const total = ENDINGS[endingKind].join('').length;
+  typewriterLines(endLines, endChars, 80, 26, '16px monospace', '#dff2ff');
+  const total = endLines.join('').length;
   if (endChars >= total) {
     ctx.fillStyle = `rgba(180,220,250,${0.4 + Math.sin(globalT * 0.06) * 0.3})`;
     ctx.font = '13px monospace';

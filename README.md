@@ -71,7 +71,7 @@ Desktop keyboard only — no touch controls.
 - Every level is **machine-proven solvable**: a scripted bot drives the real
   physics through the full multi-ghost solutions (see commit history).
 - Type-checked without a build step: `tsc --checkJs` over the plain JS
-  (`npm run check`) — the browser runs exactly what's in this repo.
+  (`bun run check`) — the browser runs exactly what's in this repo.
 
 ![rewind](shots/rewind.png)
 
@@ -88,8 +88,8 @@ the warm door, and stay.
 ## Run it yourself
 
 ```
-npm install
-npm start          # http://localhost:8080 — works fully offline (in-memory board)
+bun install
+bun start          # http://localhost:8080 — works fully offline (in-memory board)
 ```
 
 ## Credits
