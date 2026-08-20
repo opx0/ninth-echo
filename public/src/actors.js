@@ -1,7 +1,6 @@
 // Actor physics (player + ghost replays share this) and the procedural cat.
 // Input mask bits: 1 = left, 2 = right, 4 = jump.
 
-import { TILE } from './levels.js';
 
 export const L = 1, R = 2, J = 4;
 

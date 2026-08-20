@@ -5,7 +5,7 @@ import * as r3d from './render3d.js';
 import { ensure as audioEnsure, sfx, toggleMute, isMuted } from './audio.js';
 import { submitClear, fetchBoard } from './net.js';
 
-const canvas = document.getElementById('game');
+const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('game'));
 const ctx = canvas.getContext('2d');
 const W = 960, H = 540;
 r3d.init(document.getElementById('gl'));
@@ -607,6 +607,23 @@ function drawMap() {
     }
   });
 
+  // leaderboard for the selected chamber
+  if (board && boardLevel === mapSel && board.top && board.top.length) {
+    const bx = W - 185, by = 120;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,205,130,0.9)';
+    ctx.font = '13px monospace';
+    ctx.fillText('TOP ECHOES', bx, by);
+    ctx.font = '12px monospace';
+    board.top.slice(0, 6).forEach((r, i) => {
+      ctx.fillStyle = i === 0 ? '#ffe2b0' : 'rgba(200,220,240,0.75)';
+      ctx.fillText(`${(r.name + '   ').slice(0, 3)} ${r.lives}♥ ${(r.ticks / 60).toFixed(1)}s`, bx, by + 20 + i * 17);
+    });
+    ctx.fillStyle = 'rgba(140,180,215,0.5)';
+    ctx.fillText(`${board.total} clears worldwide`, bx, by + 28 + Math.min(6, board.top.length) * 17);
+    ctx.textAlign = 'center';
+  }
+
   ctx.fillStyle = 'rgba(160,200,235,0.6)';
   ctx.font = '14px monospace';
   ctx.fillText('←→ choose · ENTER enter chamber' + (isMuted() ? ' · M unmute' : ' · M mute'), W / 2, H - 20);
@@ -663,7 +680,6 @@ function drawEnding() {
     grad.addColorStop(1, 'rgba(255,250,230,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
-    const wx = Math.min(W - 200, 200 + (globalT % 100000) * 0.0);
     ctx.save();
     ctx.translate(W / 2 + Math.sin(globalT * 0.002) * 4, 410);
     ctx.scale(2.2, 2.2);
@@ -699,5 +715,6 @@ function frame(now) {
     acc -= 1000 / 60;
   }
   draw();
-  }
+  requestAnimationFrame(frame);
+}
 requestAnimationFrame(frame);

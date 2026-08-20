@@ -17,7 +17,7 @@ export function toggleMute() {
 
 export function ensure() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  ctx = new (window.AudioContext || /** @type {any} */ (window).webkitAudioContext)();
   master = ctx.createGain();
   master.gain.value = muted ? 0 : 0.9;
   master.connect(ctx.destination);

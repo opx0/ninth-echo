@@ -20,7 +20,6 @@ let sparks, sparkData = [];  // burst particle pool
 let threads = [];
 let shakeMag = 0;
 let bloomBoost = 0;
-let curWorld = null;
 let loomGroup = null, loomRings = [], loomCore = null, loomLight = null;
 let loomState = 0, loomT = 0;   // 0 idle, 1 breaking, 2 stay
 let menuLoom = null;
@@ -154,7 +153,6 @@ const BEAM_TEX = { t: null };
 // ---------- level construction ----------
 
 export function buildLevel(world) {
-  curWorld = world;
   if (levelGroup) { scene.remove(levelGroup); disposeGroup(levelGroup); }
   levelGroup = new THREE.Group();
   doorMeshes = []; plateMeshes = []; plateLights = []; boxMeshes = []; exitPulse = [];
@@ -239,7 +237,7 @@ export function buildLevel(world) {
   }
 
   // --- boxes (crates) ---
-  for (const b of world.boxes) {
+  for (let i = 0; i < world.boxes.length; i++) {
     const grp = new THREE.Group();
     const core = new THREE.Mesh(
       new THREE.BoxGeometry(27, 27, 27),
@@ -440,7 +438,6 @@ export function render(t, world, cats, playerX, playerY) {
       if (loomT === 1) { shakeMag = 14; bloomBoost = 1; }
     } else if (loomState === 2) {
       // warm down: amber calm
-      const k = Math.min(1, loomT / 120);
       loomRings.forEach(r => { r.material.emissive.lerp(new THREE.Color(0xffc87a), 0.02); });
       if (loomCore) loomCore.material.emissive.lerp(new THREE.Color(0xffd9a0), 0.02);
       if (loomLight) loomLight.color.lerp(new THREE.Color(0xffc87a), 0.02);

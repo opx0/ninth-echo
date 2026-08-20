@@ -67,6 +67,8 @@ Desktop keyboard only — no touch controls.
   service at `game.opxz.dev`.
 - Every level is **machine-proven solvable**: a scripted bot drives the real
   physics through the full multi-ghost solutions (see commit history).
+- Type-checked without a build step: `tsc --checkJs` over the plain JS
+  (`npm run check`) — the browser runs exactly what's in this repo.
 
 ![rewind](shots/rewind.png)
 
