@@ -68,6 +68,8 @@ let playerName = localStorage.getItem('ninthecho_name') || '';
 let nameChars = '';
 let submitted = false;
 let board = null, boardLevel = -1;
+let claw = parseInt(localStorage.getItem('ninthecho_claw') || '0', 10);  // bitmask by level idx
+const clawCount = () => [0, 1, 8].filter(i => claw & (1 << i)).length;
 let worldEchoes = [];   // [{name, world, recs, actors}]
 
 function loadBoardFor(level) {
@@ -90,6 +92,7 @@ function resetShadows() {
 function enterLevel(idx) {
   levelIdx = idx;
   world = new World(LEVELS[idx]);
+  world.relicTaken = !!(claw & (1 << idx));
   r3d.buildLevel(world);
   player = new Actor(world);
   ghosts = [];
@@ -212,7 +215,7 @@ function tick() {
     clearT++;
     if (clearT > 140) {
       if (LEVELS[levelIdx].finale) {
-        endingKind = clearKind === 'stay' ? 'stay' : 'break';
+        endingKind = clearKind === 'stay' ? 'stay' : clawCount() === 3 ? 'sever' : 'break';
         endChars = 0;
         state = 'ending';
       } else {
@@ -244,8 +247,13 @@ const DEBUG_MODE = new URLSearchParams(location.search).has('debug');
 
 function tickPlay() {
   if (wasPressed('Escape') || wasPressed('KeyP')) { state = 'pause'; return; }
+  if (DEBUG_MODE && wasPressed('KeyL') && world.relic) {
+    player.x = world.relic.c * TILE + 4;
+    player.y = world.relic.r * TILE + 2;
+    player.vy = 0;
+  }
   if (DEBUG_MODE && wasPressed('KeyK')) {
-    const e = world.exits[0];
+    const e = world.exits.find(x => x.kind !== 'stay') || world.exits[0];
     clearT = 0; clearKind = e.kind;
     sfxSafe(() => sfx.win());
     state = 'clear';
@@ -333,6 +341,19 @@ function tickPlay() {
     r3d.burst(player.x + player.w / 2, player.y + player.h / 2, 0xff8f8f, 22, 3.5);
   }
 
+  if (player.alive && world.relic && !world.relicTaken) {
+    const rx = world.relic.c * TILE, ry = world.relic.r * TILE;
+    if (player.x < rx + TILE && player.x + player.w > rx && player.y < ry + TILE && player.y + player.h > ry) {
+      world.relicTaken = true;
+      claw |= 1 << levelIdx;
+      localStorage.setItem('ninthecho_claw', String(claw));
+      r3d.collectRelic();
+      r3d.burst(rx + TILE / 2, ry + TILE / 2, 0xffd8a0, 26, 3.5, 50);
+      r3d.pulse(0.6);
+      sfxSafe(() => sfx.win());
+    }
+  }
+
   if (player.alive) {
     const e = world.exitHit(player);
     if (e) {
@@ -341,7 +362,7 @@ function tickPlay() {
       r3d.burst(e.c * TILE + TILE / 2, e.r * TILE + TILE / 2, e.kind === 'stay' ? 0xffcf8a : 0xeaffff, 34, 4, 55);
       sfxSafe(() => sfx.win());
       if (LEVELS[levelIdx].finale) {
-        if (e.kind === 'stay') r3d.loomStay(); else { r3d.loomBreak(); sfxSafe(() => sfx.death()); }
+        if (e.kind === 'stay') r3d.loomStay(); else { r3d.loomBreak(); sfxSafe(() => sfx.death()); if (clawCount() === 3) r3d.shake(16); }
       }
       state = 'clear';
       return;
@@ -562,6 +583,24 @@ function drawHud() {
   ctx.fillStyle = 'rgba(140,180,215,0.5)';
   ctx.fillText('R rewind · ESC map · M mute', W - 20, 44);
 
+  // claw assembly
+  if (clawCount() > 0) {
+    ctx.save();
+    ctx.textAlign = 'right';
+    for (let i = 0; i < 3; i++) {
+      const cx2 = W - 30 - i * 16, cy2 = 62;
+      const have = i < clawCount();
+      ctx.strokeStyle = have ? '#ffd8a0' : 'rgba(140,120,90,0.35)';
+      if (have) { ctx.shadowColor = '#ffc060'; ctx.shadowBlur = 6; } else ctx.shadowBlur = 0;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx2 - 5, cy2, 7, -0.9, 0.9);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // hint
   ctx.textAlign = 'center';
   ctx.font = '14px monospace';
@@ -671,6 +710,19 @@ function drawMap() {
       ctx.stroke();
     }
     ctx.restore();
+    // claw shard pin on relic chambers
+    if (lv.relic) {
+      const have = !!(claw & (1 << i));
+      ctx.save();
+      ctx.strokeStyle = have ? '#ffd8a0' : locked ? 'rgba(140,120,90,0.3)' : 'rgba(255,205,130,0.6)';
+      if (have) { ctx.shadowColor = '#ffc060'; ctx.shadowBlur = 6; }
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(x + w - 10, y + 10, 5, -0.9, 0.9);
+      ctx.stroke();
+      ctx.restore();
+    }
     // boss skull pin on the finale
     if (i === LEVELS.length - 1) {
       const px2 = x + w / 2, py2 = y - 10;

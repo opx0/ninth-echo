@@ -41,6 +41,7 @@ export const MOODS = {
 export const LEVELS = [
   {
     name: 'WAKE',
+    relic: [28, 7],
     mood: 'under',
     story: [
       'Cold tiles. A hum in the dark.',
@@ -72,6 +73,7 @@ export const LEVELS = [
   },
   {
     name: 'NINE',
+    relic: [16, 12],
     mood: 'under',
     husks: [[10, 15], [17, 15]],
     story: [
@@ -200,10 +202,12 @@ export const LEVELS = [
     husks: [[7, 12], [10, 12]],
     story: [
       'THE PIT WANTS A LIFE, purrs the Loom.',
-      'GIVE IT ONE.',
-      'YOU HAVE PLENTY.',
+      'GIVE IT ONE. YOU HAVE PLENTY.',
+      'A warden of bone circles above, counting.',
     ],
     hint: 'The plate is down there. A life must stay behind. Aim true.',
+    warden: true,
+    beams: [{ cols: [17, 18], times: [200, 500, 800] }],
     mapPos: [700, 240],
     grid: [
       '################################',
@@ -290,14 +294,17 @@ export const LEVELS = [
   },
   {
     name: 'PARADOX',
+    relic: [19, 13],
     mood: 'deep',
     husks: [[12, 16]],
     story: [
       'THREE OF YOU IN ONE ROOM, the Loom laughs.',
-      'WHICH ONE IS REAL?',
-      'WRONG. NONE OF YOU ARE.',
+      'WHICH ONE IS REAL? WRONG. NONE OF YOU ARE.',
+      'A violet warden spreads its wings, and counts your selves.',
     ],
     hint: 'One holds the door. One builds the path. Stay out of their way.',
+    warden: true,
+    beams: [{ cols: [11, 12], times: [150, 450, 750] }],
     mapPos: [340, 380],
     grid: [
       '################################',
@@ -363,6 +370,19 @@ export const LEVELS = [
 ];
 
 export const ENDINGS = {
+  sever: [
+    'You raised the Claw of the First Cat.',
+    'It recognized its own.',
+    '',
+    'The threads did not break.',
+    'They were CUT.',
+    '',
+    'Nine lives, freed in a single stroke.',
+    'Somewhere beyond the morning,',
+    'a great tail curled, satisfied.',
+    '',
+    'THE NINTH ECHO — severed, and free.',
+  ],
   break: [
     'You shattered the Loom.',
     'The echoes rose like smoke, stretched once,',

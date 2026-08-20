@@ -15,6 +15,7 @@ export class World {
     this.spikes = [];
     this.exits = [];
     this.boxSpawns = [];
+    this.relic = def.relic ? { c: def.relic[0], r: def.relic[1] } : null;
     this.spawn = { x: TILE, y: TILE };
 
     const grid = def.grid;

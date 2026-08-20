@@ -19,8 +19,11 @@ Your past lives hold pressure plates, shove crates, and stand in pits so the
 current you can walk through doors they keep open. You have nine lives per
 chamber. Spend them wisely.
 
-At the heart of the Loom, the game asks you one question — and it has **two
-endings**.
+The Loom re-dresses itself as you descend — rain-blue under-halls, a sepia
+bone archive, teal root-depths, the violet deep, and the ember heart. Wardens
+watch some chambers. At the heart, the game asks you one question — **two
+endings**. And those who gather all three shards of what the First Cat left
+behind will find a **third**.
 
 ## World echoes — you are never alone
 

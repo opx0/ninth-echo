@@ -27,6 +27,7 @@ const fogBanks = [];
 let beamPool = [];
 let avatar = null;
 let bgMesh = null, silMeshes = [], ambLight = null, dirLight = null;
+let relicMesh = null;
 let curMood = MOODS.under;
 
 function silhouetteTexture(tint, alpha) {
@@ -390,6 +391,38 @@ export function buildLevel(world) {
     exitPulse.push({ grp, mat, glow, warm });
   }
 
+  // claw shard relic (skipped if already collected this save)
+  relicMesh = null;
+  if (world.relic && !world.relicTaken) {
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 64;
+    const g2 = cv.getContext('2d');
+    g2.strokeStyle = '#ffe2a8';
+    g2.lineWidth = 5;
+    g2.lineCap = 'round';
+    g2.shadowColor = '#ffc060';
+    g2.shadowBlur = 10;
+    g2.beginPath();
+    g2.arc(20, 32, 20, -0.9, 0.9);   // curved claw
+    g2.stroke();
+    g2.lineWidth = 3;
+    g2.beginPath();
+    g2.arc(30, 32, 14, -0.8, 0.8);
+    g2.stroke();
+    const tex2 = new THREE.CanvasTexture(cv);
+    tex2.colorSpace = THREE.SRGBColorSpace;
+    relicMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(26, 26),
+      new THREE.MeshBasicMaterial({ map: tex2, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    relicMesh.position.set(sx(world.relic.c * TILE + TILE / 2), sy(world.relic.r * TILE + TILE / 2), 6);
+    const rl = new THREE.PointLight(0xffc060, 2200, 120);
+    rl.position.copy(relicMesh.position);
+    rl.position.z = 25;
+    relicMesh.userData.light = rl;
+    levelGroup.add(rl);
+    levelGroup.add(relicMesh);
+  }
+
   // husks — petrified cats the Loom collected before you
   for (const [c, r] of (world.def.husks || [])) {
     const cv = document.createElement('canvas');
@@ -411,6 +444,7 @@ export function buildLevel(world) {
   // finale: the Loom itself hangs over the chamber
   loomGroup = null; loomRings = []; loomState = 0; loomT = 0;
   avatar = null;
+  beamPool = [];
   if (world.def && world.def.finale) {
     loomGroup = new THREE.Group();
     const colors = [0x6ee7ff, 0xff7ac8, 0xffb347];
@@ -432,23 +466,45 @@ export function buildLevel(world) {
     loomGroup.add(loomLight);
     loomGroup.position.set(0, 90, -20);
     levelGroup.add(loomGroup);
+  }
 
-    // the First Cat — spectral face of the old tales, watching from above
+  // any beam-armed chamber gets a spectral warden and the column pool
+  if (world.def.beams) {
+    const finale = !!world.def.finale;
     const av = document.createElement('canvas');
     av.width = 512; av.height = 512;
     const ag = av.getContext('2d');
+    // radiance wings: tapered rays behind the face
+    ag.save();
+    ag.translate(256, 300);
+    ag.globalAlpha = 0.4;
+    ag.fillStyle = '#dff2ff';
+    for (let i = 0; i < 13; i++) {
+      const a = Math.PI * (0.08 + (i / 12) * 0.84) + Math.PI;
+      const len = 190 + (i % 3) * 40;
+      ag.beginPath();
+      ag.moveTo(Math.cos(a - 0.05) * 60, Math.sin(a - 0.05) * 60);
+      ag.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+      ag.lineTo(Math.cos(a + 0.05) * 60, Math.sin(a + 0.05) * 60);
+      ag.closePath();
+      ag.fill();
+    }
+    ag.restore();
     ag.translate(256, 420);
     ag.scale(9, 9);
     drawCat(ag, 0, 0, 1, 0.5, 0, { ghost: true, alpha: 1, grounded: true });
     const at = new THREE.CanvasTexture(av);
     at.colorSpace = THREE.SRGBColorSpace;
+    const size = finale ? 320 : 200;
     avatar = new THREE.Mesh(
-      new THREE.PlaneGeometry(300, 300),
-      new THREE.MeshBasicMaterial({ map: at, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }));
-    avatar.position.set(0, 110, -55);
+      new THREE.PlaneGeometry(size, size),
+      new THREE.MeshBasicMaterial({
+        map: at, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending,
+        color: finale ? 0xffffff : curMood.accent,
+      }));
+    avatar.position.set(0, finale ? 110 : 150, -55);
     levelGroup.add(avatar);
 
-    // beam column pool
     beamPool = [];
     for (let i = 0; i < 6; i++) {
       const bm = new THREE.Mesh(
@@ -532,6 +588,12 @@ export function streaks() {
 export function shake(mag) { shakeMag = Math.max(shakeMag, mag); }
 export function boostBloom() { bloomBoost = 1; }
 export function pulse(k) { bloomBoost = Math.max(bloomBoost, k); }
+export function collectRelic() {
+  if (!relicMesh) return;
+  relicMesh.visible = false;
+  if (relicMesh.userData.light) relicMesh.userData.light.intensity = 0;
+  relicMesh = null;
+}
 
 // ---------- per-frame render ----------
 
@@ -585,6 +647,12 @@ export function render(t, world, cats, playerX, playerY, loopTick = -1) {
   for (const f of fogBanks) {
     f.position.x += f.userData.drift;
     if (f.position.x > 1100) f.position.x = -1100;
+  }
+
+  // relic shard bob + spin
+  if (relicMesh) {
+    relicMesh.position.y += Math.sin(t * 0.05) * 0.15;
+    relicMesh.rotation.z = Math.sin(t * 0.03) * 0.3;
   }
 
   // First Cat gaze beams

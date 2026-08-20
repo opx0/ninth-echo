@@ -24,7 +24,9 @@ THE NINTH ECHO is a time-loop puzzle-platformer. Each chamber runs a 15-second
 loop. Press R and time rewinds — but a life stays behind: an echo that repeats
 your last run, input for input. Echoes hold pressure plates, shove crates and
 stand in spike pits so the current you can get through. Nine lives per
-chamber, ten chambers, and a final choice with **two different endings**.
+chamber, ten chambers across five visual biomes, spectral wardens, hidden
+claw-shard relics, and a finale boss — with **three endings** (one hidden
+behind assembling the Claw of the First Cat).
 
 And you are never alone: when you clear a chamber, your winning runs upload —
 other players see your **golden echo cat** solving the room alongside them in
