@@ -147,9 +147,9 @@ export function drawCat(ctx, cx, cy, face, phase, vy, o = {}) {
   else ctx.globalAlpha = a;
   ctx.scale(sx, sy);
 
-  const bob = o.running ? Math.sin(phase * 2) * 1.5 : Math.sin(phase) * 0.8;
-  const bodyFill = o.remote ? 'rgba(255,210,140,0.16)' : o.ghost ? 'rgba(140,230,255,0.20)' : '#0c1018';
-  const rim = o.remote ? 'rgba(255,205,130,0.8)' : o.ghost ? 'rgba(150,235,255,0.85)' : 'rgba(110,210,255,0.35)';
+  const bob = o.husk ? 0 : o.running ? Math.sin(phase * 2) * 1.5 : Math.sin(phase) * 0.8;
+  const bodyFill = o.husk ? '#232c3a' : o.remote ? 'rgba(255,210,140,0.16)' : o.ghost ? 'rgba(140,230,255,0.20)' : '#0c1018';
+  const rim = o.husk ? 'rgba(110,125,150,0.45)' : o.remote ? 'rgba(255,205,130,0.8)' : o.ghost ? 'rgba(150,235,255,0.85)' : 'rgba(110,210,255,0.35)';
 
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = rim;
@@ -203,6 +203,12 @@ export function drawCat(ctx, cx, cy, face, phase, vy, o = {}) {
       ctx.moveTo(ex + 1.6, hy - 1.6); ctx.lineTo(ex - 1.6, hy + 1.6);
       ctx.stroke();
     }
+  } else if (o.husk) {
+    ctx.fillStyle = '#0a0e16';
+    ctx.beginPath();
+    ctx.ellipse(hx + 2, hy - 0.5, 1.8, 2.4, 0, 0, Math.PI * 2);
+    ctx.ellipse(hx + 6.2, hy - 0.5, 1.6, 2.2, 0, 0, Math.PI * 2);
+    ctx.fill();
   } else {
     const blink = Math.sin(phase * 0.7) > 0.97 ? 0.25 : 1;
     ctx.save();

@@ -20,7 +20,21 @@ export function ensure() {
   ctx = new (window.AudioContext || /** @type {any} */ (window).webkitAudioContext)();
   master = ctx.createGain();
   master.gain.value = muted ? 0 : 0.9;
-  master.connect(ctx.destination);
+  // cavern: dry path + generated-impulse convolver reverb
+  const dry = ctx.createGain();
+  dry.gain.value = 0.75;
+  master.connect(dry).connect(ctx.destination);
+  const verb = ctx.createConvolver();
+  const dur = 2.6, len = Math.floor(ctx.sampleRate * dur);
+  const impulse = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = impulse.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+  }
+  verb.buffer = impulse;
+  const wet = ctx.createGain();
+  wet.gain.value = 0.42;
+  master.connect(verb).connect(wet).connect(ctx.destination);
   sfxGain = ctx.createGain();
   sfxGain.gain.value = 0.7;
   sfxGain.connect(master);
@@ -147,10 +161,24 @@ function startMusic() {
   drone.connect(dg).connect(musicGain);
   drone.start();
   const pattern = [0, 2, 4, 6, 4, 2, 5, 3];
+  const motif = [4, 3, 1, 0, 1, 3, 2, 0];   // slow falling minor line
   musicTimer = setInterval(() => {
     if (!ctx || ctx.state !== 'running') return;
     const idx = pattern[step % pattern.length];
     padNote(SCALE[idx] * (step % 16 >= 8 ? 1 : 0.5), 2.2);
+    if (step % 2 === 1) {
+      const f = SCALE[motif[(step >> 1) % motif.length]] * 2;
+      const tm = ctx.currentTime;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, tm);
+      g.gain.linearRampToValueAtTime(0.11, tm + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.001, tm + 1.9);
+      o.connect(g).connect(musicGain);
+      o.start(tm); o.stop(tm + 2);
+    }
     step++;
   }, 1400);
 }

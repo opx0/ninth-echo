@@ -23,6 +23,76 @@ let bloomBoost = 0;
 let loomGroup = null, loomRings = [], loomCore = null, loomLight = null;
 let loomState = 0, loomT = 0;   // 0 idle, 1 breaking, 2 stay
 let menuLoom = null;
+const fogBanks = [];
+
+function silhouetteTexture(tint, alpha) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 576;
+  const g = c.getContext('2d');
+  g.fillStyle = tint;
+  g.globalAlpha = alpha;
+  // broken pillars
+  for (let i = 0; i < 5; i++) {
+    const x = (i / 5) * 1024 + Math.random() * 120;
+    const w = 26 + Math.random() * 46;
+    const h = 150 + Math.random() * 260;
+    g.beginPath();
+    g.moveTo(x, 576);
+    g.lineTo(x, 576 - h);
+    // jagged broken top
+    for (let j = 0; j <= 4; j++) g.lineTo(x + (w * j) / 4, 576 - h + (j % 2 ? 14 : -6) * Math.random());
+    g.lineTo(x + w, 576);
+    g.closePath();
+    g.fill();
+    // arch: connect some pillars with a semicircle span
+    if (i % 3 === 1) {
+      const r = 60 + Math.random() * 40;
+      g.beginPath();
+      g.arc(x + w + r, 576 - h + 30, r, Math.PI, 0);
+      g.lineWidth = 9 + Math.random() * 7;
+      g.strokeStyle = tint;
+      g.stroke();
+    }
+  }
+  // hanging roots from the ceiling
+  g.lineWidth = 3;
+  g.strokeStyle = tint;
+  for (let i = 0; i < 14; i++) {
+    const x = Math.random() * 1024;
+    const len = 60 + Math.random() * 160;
+    g.beginPath();
+    g.moveTo(x, 0);
+    g.bezierCurveTo(x - 15, len * 0.4, x + 18, len * 0.7, x + Math.random() * 24 - 12, len);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function fogTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 96;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * 256, y = Math.random() * 96, r = 24 + Math.random() * 44;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(140,175,220,0.10)');
+    grad.addColorStop(1, 'rgba(140,175,220,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 256, 96);
+  }
+  // fade the whole sheet toward its edges so plane borders never show
+  g.globalCompositeOperation = 'destination-in';
+  const mask = g.createRadialGradient(128, 48, 10, 128, 48, 130);
+  mask.addColorStop(0, 'rgba(0,0,0,1)');
+  mask.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = mask;
+  g.fillRect(0, 0, 256, 96);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 
 const sx = x => x - W / 2;
 const sy = y => H / 2 - y;
@@ -49,6 +119,26 @@ export function init(canvas) {
   const bg = new THREE.Mesh(new THREE.PlaneGeometry(2400, 1400), new THREE.MeshBasicMaterial({ map: bgTex, fog: false }));
   bg.position.z = -260;
   scene.add(bg);
+
+  // parallax silhouette layers — ruined arches, pillars, hanging roots
+  for (const [z, tint, alpha] of [[-230, '#121d33', 0.7], [-170, '#0d1626', 0.75], [-120, '#0a101d', 0.85]]) {
+    const tex = silhouetteTexture(tint, alpha);
+    const pl = new THREE.Mesh(
+      new THREE.PlaneGeometry(1900, 1069),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, fog: false, depthWrite: false }));
+    pl.position.z = z;
+    scene.add(pl);
+  }
+  // drifting fog banks
+  for (let i = 0; i < 3; i++) {
+    const fogMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(900, 320),
+      new THREE.MeshBasicMaterial({ map: fogTexture(), transparent: true, opacity: 0.11, fog: false, depthWrite: false }));
+    fogMesh.position.set((i - 1) * 500, -80 + i * 90, -100 - i * 30);
+    fogMesh.userData.drift = 0.06 + i * 0.03;
+    fogBanks.push(fogMesh);
+    scene.add(fogMesh);
+  }
 
   // loom threads — swaying filaments behind the play field
   for (let i = 0; i < 7; i++) {
@@ -273,6 +363,24 @@ export function buildLevel(world) {
     exitPulse.push({ grp, mat, glow, warm });
   }
 
+  // husks — petrified cats the Loom collected before you
+  for (const [c, r] of (world.def.husks || [])) {
+    const cv = document.createElement('canvas');
+    cv.width = 96; cv.height = 96;
+    const g2 = cv.getContext('2d');
+    g2.translate(48, 78);
+    g2.rotate(-0.12);
+    g2.scale(1.6, 1.5);
+    drawCat(g2, 0, 0, Math.random() > 0.5 ? 1 : -1, 0.3, 0, { husk: true, grounded: true });
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(48, 48),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.85, depthWrite: false }));
+    mesh.position.set(sx(c * TILE + TILE / 2), sy((r + 1) * TILE) + 15, -6);
+    levelGroup.add(mesh);
+  }
+
   // finale: the Loom itself hangs over the chamber
   loomGroup = null; loomRings = []; loomState = 0; loomT = 0;
   if (world.def && world.def.finale) {
@@ -418,6 +526,11 @@ export function render(t, world, cats, playerX, playerY) {
     } else slot.mesh.visible = false;
   });
 
+  for (const f of fogBanks) {
+    f.position.x += f.userData.drift;
+    if (f.position.x > 1100) f.position.x = -1100;
+  }
+
   // the Loom turns
   if (loomGroup) {
     loomT++;
@@ -504,6 +617,10 @@ export function renderMenu(t) {
   menuLoom.visible = true;
   menuLoom.children.forEach(o => { if (o.userData.axis) o.rotateOnAxis(o.userData.axis, o.userData.speed); });
   menuLoom.rotation.z = Math.sin(t * 0.002) * 0.1;
+  for (const f of fogBanks) {
+    f.position.x += f.userData.drift;
+    if (f.position.x > 1100) f.position.x = -1100;
+  }
   // dust + threads still alive
   for (const line of threads) {
     const arr = line.geometry.attributes.position.array;

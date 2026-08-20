@@ -47,6 +47,7 @@ export const LEVELS = [
   },
   {
     name: 'NINE',
+    husks: [[10, 15], [17, 15]],
     story: [
       'The Loom speaks from the walls:',
       'LITTLE GHOST. EVERY CAT IS BORN NINE TIMES.',
@@ -107,6 +108,7 @@ export const LEVELS = [
   },
   {
     name: 'CHAIN',
+    husks: [[8, 16], [18, 16]],
     story: [
       'YOUR PAST SELVES ARE LOYAL, says the Loom.',
       'THEY DIED FOR YOU.',
@@ -165,6 +167,7 @@ export const LEVELS = [
   },
   {
     name: 'SACRIFICE',
+    husks: [[7, 12], [10, 12]],
     story: [
       'THE PIT WANTS A LIFE, purrs the Loom.',
       'GIVE IT ONE.',
@@ -224,6 +227,7 @@ export const LEVELS = [
   },
   {
     name: 'CONVOY',
+    husks: [[7, 16], [16, 16]],
     story: [
       'You cannot carry it alone.',
       'Fortunately, you are not alone.',
@@ -254,6 +258,7 @@ export const LEVELS = [
   },
   {
     name: 'PARADOX',
+    husks: [[12, 16]],
     story: [
       'THREE OF YOU IN ONE ROOM, the Loom laughs.',
       'WHICH ONE IS REAL?',
@@ -284,6 +289,7 @@ export const LEVELS = [
   },
   {
     name: 'THE NINTH LIFE',
+    husks: [[20, 16]],
     story: [
       'This is the heart of the Loom.',
       'The loop ends here, one way or another.',

@@ -51,6 +51,7 @@ let history = [];
 let doorSfxDone = [];
 let lastWarnSec = -1;
 let noLivesFlash = 0;
+let hitStop = 0, deathFlash = 0;
 
 let rewindPos = 0, rewindStep = 1;
 let clearT = 0, clearKind = 'next';
@@ -155,6 +156,7 @@ Object.defineProperty(window, 'NL', { value: {
 // ---------- ticking ----------
 function tick() {
   globalT++;
+  if (hitStop > 0) { hitStop--; return; }   // impact freeze on death
 
   if (state === 'title') {
     if (wasPressed('Enter') || wasPressed('Space')) {
@@ -303,6 +305,8 @@ function tickPlay() {
   if (player.alive && world.hitsSpike(player)) {
     player.die();
     sfxSafe(() => sfx.death());
+    hitStop = 6;
+    deathFlash = 5;
     r3d.shake(10);
     r3d.burst(player.x + player.w / 2, player.y + player.h / 2, 0xff8f8f, 22, 3.5);
   }
@@ -398,6 +402,12 @@ function drawScene() {
   }
 
   r3d.render(globalT, world, cats, px, py);
+
+  if (deathFlash > 0) {
+    ctx.fillStyle = `rgba(255,235,235,${deathFlash * 0.09})`;
+    ctx.fillRect(0, 0, W, H);
+    deathFlash--;
+  }
 
   // 2D overlay (canvas already cleared transparent in draw())
   if (state === 'rewind') {
