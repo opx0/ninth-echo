@@ -640,135 +640,243 @@ function drawTitle() {
   ctx.fillText('made for BTT Web Game Jam — Summer 2026', W / 2, 500);
 }
 
-function drawMap() {
-  r3d.renderMenu(globalT);
-  ctx.fillStyle = 'rgba(4,6,12,0.72)';
-  ctx.fillRect(0, 0, W, H);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#bfe8ff';
-  ctx.font = 'bold 26px monospace';
-  ctx.save();
-  ctx.shadowColor = '#7fe3ff'; ctx.shadowBlur = 14;
-  ctx.fillText('THE LOOM — ATLAS', W / 2, 48);
-  ctx.restore();
-  ctx.fillStyle = 'rgba(140,180,215,0.6)';
-  ctx.font = '12px monospace';
-  ctx.fillText('descend, chamber by chamber', W / 2, 70);
+// --- atlas: hand-inked cartography, not UI boxes ---
+let paperTex = null;
+function paper() {
+  if (paperTex) return paperTex;
+  paperTex = document.createElement('canvas');
+  paperTex.width = paperTex.height = 192;
+  const g = paperTex.getContext('2d');
+  for (let i = 0; i < 500; i++) {
+    g.fillStyle = `rgba(${180 + Math.random() * 60},${190 + Math.random() * 50},${215 + Math.random() * 40},${0.015 + Math.random() * 0.03})`;
+    g.fillRect(Math.random() * 192, Math.random() * 192, 1.3, 1.3);
+  }
+  g.strokeStyle = 'rgba(160,180,210,0.03)';
+  for (let i = 0; i < 7; i++) {
+    g.beginPath();
+    const y0 = Math.random() * 192;
+    g.moveTo(0, y0);
+    g.bezierCurveTo(60, y0 + 20 * (Math.random() - 0.5), 130, y0 + 20 * (Math.random() - 0.5), 192, y0 + 12 * (Math.random() - 0.5));
+    g.stroke();
+  }
+  return paperTex;
+}
 
-  // hand-laid interconnected rooms, Hollow-Knight-map style
-  const ROOMS = [
-    [140, 130, 74, 44], [244, 152, 74, 44], [348, 130, 74, 44],
-    [470, 180, 78, 46], [574, 202, 78, 46], [678, 180, 78, 46],
-    [560, 300, 76, 44], [446, 322, 76, 44],
-    [480, 400, 84, 46],
-    [468, 474, 108, 50],
-  ];
-  const LINKS = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9]];
+// jittered organic room outline — same seed, same wobble, every frame
+function roomPath(x, y, w, h, seed) {
+  const jit = (k) => Math.sin(seed * 13.7 + k * 2.31) * 2.4 + Math.sin(seed * 5.1 + k * 4.7) * 1.2;
+  const pts = [];
+  const per = 2 * (w + h);
+  const step = 13;
+  for (let d = 0; d < per; d += step) {
+    let px2, py2, nx2, ny2;
+    if (d < w) { px2 = x + d; py2 = y; nx2 = 0; ny2 = -1; }
+    else if (d < w + h) { px2 = x + w; py2 = y + (d - w); nx2 = 1; ny2 = 0; }
+    else if (d < 2 * w + h) { px2 = x + w - (d - w - h); py2 = y + h; nx2 = 0; ny2 = 1; }
+    else { px2 = x; py2 = y + h - (d - 2 * w - h); nx2 = -1; ny2 = 0; }
+    const j = jit(d / step);
+    pts.push([px2 + nx2 * j, py2 + ny2 * j]);
+  }
+  ctx.beginPath();
+  ctx.moveTo((pts[0][0] + pts[pts.length - 1][0]) / 2, (pts[0][1] + pts[pts.length - 1][1]) / 2);
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    ctx.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+  }
+  ctx.closePath();
+}
+
+const ATLAS_ROOMS = [
+  [95, 100, 80, 46], [205, 140, 80, 46], [318, 100, 80, 46],
+  [448, 138, 82, 48], [565, 178, 82, 48], [682, 140, 86, 48],
+  [600, 268, 82, 48], [468, 296, 82, 48],
+  [392, 372, 90, 50],
+  [508, 420, 118, 58],
+];
+const ATLAS_LINKS = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9]];
+
+function drawMap() {
+  // ink-dark parchment ground
+  ctx.fillStyle = '#0a0d16';
+  ctx.fillRect(0, 0, W, H);
+  const wash = ctx.createRadialGradient(W / 2, H / 2 - 30, 60, W / 2, H / 2, 640);
+  wash.addColorStop(0, 'rgba(70,88,120,0.14)');
+  wash.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.8;
+  for (let ty = 0; ty < H; ty += 192)
+    for (let tx = 0; tx < W; tx += 192) ctx.drawImage(paper(), tx, ty);
+  ctx.globalAlpha = 1;
+
+  // ornamented title
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#cfdcec';
+  ctx.font = '24px Georgia, serif';
+  ctx.fillText('T H E   L O O M', W / 2, 46);
+  ctx.strokeStyle = 'rgba(170,190,215,0.4)';
+  ctx.lineWidth = 1;
+  for (const dir of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + dir * 130, 40);
+    ctx.lineTo(W / 2 + dir * 250, 40);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(W / 2 + dir * 258, 40, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(150,170,195,0.5)';
+  ctx.font = 'italic 12px Georgia, serif';
+  ctx.fillText('descend, chamber by chamber', W / 2, 66);
+
   const hex = n => '#' + n.toString(16).padStart(6, '0');
 
-  // corridors
-  ctx.lineWidth = 5;
-  for (const [a, b] of LINKS) {
-    const ra = ROOMS[a], rb = ROOMS[b];
+  // corridors: narrow inked channels
+  for (const [a, b] of ATLAS_LINKS) {
+    const ra = ATLAS_ROOMS[a], rb = ATLAS_ROOMS[b];
+    const ax = ra[0] + ra[2] / 2, ay = ra[1] + ra[3] / 2;
+    const bx2 = rb[0] + rb[2] / 2, by2 = rb[1] + rb[3] / 2;
+    const dx = bx2 - ax, dy = by2 - ay, len = Math.hypot(dx, dy);
+    const px2 = -dy / len * 3.5, py2 = dx / len * 3.5;
     const open = b <= unlocked;
-    ctx.strokeStyle = open ? 'rgba(150,190,230,0.35)' : 'rgba(90,110,140,0.12)';
-    ctx.beginPath();
-    ctx.moveTo(ra[0] + ra[2] / 2, ra[1] + ra[3] / 2);
-    ctx.lineTo(rb[0] + rb[2] / 2, rb[1] + rb[3] / 2);
-    ctx.stroke();
+    ctx.strokeStyle = open ? 'rgba(150,170,200,0.4)' : 'rgba(110,125,150,0.14)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash(open ? [] : [3, 5]);
+    for (const sgn of [1, -1]) {
+      ctx.beginPath();
+      ctx.moveTo(ax + px2 * sgn, ay + py2 * sgn);
+      ctx.lineTo(bx2 + px2 * sgn, by2 + py2 * sgn);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
   }
 
   LEVELS.forEach((lv, i) => {
-    const [x, y, w, h] = ROOMS[i];
+    const [x, y, w, h] = ATLAS_ROOMS[i];
     const cleared = i < unlocked;
     const locked = i > unlocked;
-    const accent = hex(MOODS[lv.mood].accent);
-    ctx.save();
-    // room body
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 8);
-    if (cleared) {
-      ctx.fillStyle = accent + '2e';
+    const accent = MOODS[lv.mood].accent;
+    const aHex = hex(accent);
+
+    if (locked) {
+      // unexplored: faint dashed outline only
+      ctx.setLineDash([4, 5]);
+      ctx.strokeStyle = 'rgba(120,135,160,0.22)';
+      ctx.lineWidth = 1;
+      roomPath(x, y, w, h, i);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      // opaque ink base hides corridor lines under the chamber…
+      roomPath(x, y, w, h, i);
+      ctx.fillStyle = '#0d1220';
       ctx.fill();
-    } else if (!locked) {
-      ctx.fillStyle = accent + '18';
+      // …then the muted region tint
+      roomPath(x, y, w, h, i);
+      ctx.fillStyle = aHex + (cleared ? '26' : '15');
       ctx.fill();
-    }
-    ctx.lineWidth = i === mapSel ? 2.5 : 1.5;
-    if (!locked) { ctx.shadowColor = accent; ctx.shadowBlur = cleared ? 6 : 10; }
-    ctx.strokeStyle = locked ? 'rgba(110,130,160,0.25)' : accent;
-    if (i === mapSel) ctx.strokeStyle = '#eaffff';
-    ctx.stroke();
-    // interior floor line
-    if (!locked) {
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = accent + '66';
+      // soft inner light for cleared chambers
+      if (cleared) {
+        const gl2 = ctx.createRadialGradient(x + w / 2, y + h / 2, 2, x + w / 2, y + h / 2, w / 2);
+        gl2.addColorStop(0, aHex + '30');
+        gl2.addColorStop(1, aHex + '00');
+        ctx.fillStyle = gl2;
+        ctx.fill();
+      }
+      // double-inked border: broad faint + fine bright
+      roomPath(x, y, w, h, i);
+      ctx.strokeStyle = aHex + '3d';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      roomPath(x, y, w, h, i);
+      ctx.strokeStyle = i === mapSel ? '#e8f2fa' : aHex + 'aa';
+      ctx.lineWidth = i === mapSel ? 1.8 : 1.1;
+      ctx.stroke();
+      // interior: floor line + notches, like surveyed chambers
+      ctx.strokeStyle = aHex + '55';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(x + 8, y + h - 10);
-      ctx.lineTo(x + w - 8, y + h - 10);
+      ctx.moveTo(x + 9, y + h - 11);
+      ctx.lineTo(x + w - 9, y + h - 11);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.3, y + h - 11);
+      ctx.lineTo(x + w * 0.3, y + h - 17);
+      ctx.moveTo(x + w * 0.66, y + h - 11);
+      ctx.lineTo(x + w * 0.66, y + h - 15);
       ctx.stroke();
     }
-    ctx.restore();
-    // claw shard pin on relic chambers
+
+    // claw shard pin
     if (lv.relic) {
       const have = !!(claw & (1 << i));
       ctx.save();
-      ctx.strokeStyle = have ? '#ffd8a0' : locked ? 'rgba(140,120,90,0.3)' : 'rgba(255,205,130,0.6)';
-      if (have) { ctx.shadowColor = '#ffc060'; ctx.shadowBlur = 6; }
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = have ? '#ffd8a0' : locked ? 'rgba(140,120,90,0.3)' : 'rgba(230,190,130,0.55)';
+      if (have) { ctx.shadowColor = '#ffc060'; ctx.shadowBlur = 5; }
+      ctx.lineWidth = 1.8;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.arc(x + w - 10, y + 10, 5, -0.9, 0.9);
+      ctx.arc(x + w - 8, y + 9, 4.5, -0.9, 0.9);
       ctx.stroke();
       ctx.restore();
     }
-    // boss skull pin on the finale
+    // boss sigil on the finale
     if (i === LEVELS.length - 1) {
-      const px2 = x + w / 2, py2 = y - 10;
+      const px3 = x + w / 2, py3 = y - 12;
       ctx.save();
-      ctx.shadowColor = '#ff9840'; ctx.shadowBlur = 8;
-      ctx.fillStyle = locked ? 'rgba(160,120,90,0.5)' : '#ffcf9a';
+      ctx.strokeStyle = locked ? 'rgba(190,140,95,0.45)' : '#ffcf9a';
+      if (!locked) { ctx.shadowColor = '#ff9840'; ctx.shadowBlur = 5; }
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.arc(px2, py2, 6, 0, Math.PI * 2);
-      ctx.moveTo(px2 - 6, py2 - 2); ctx.lineTo(px2 - 7, py2 - 11); ctx.lineTo(px2 - 1, py2 - 5.5);
-      ctx.moveTo(px2 + 6, py2 - 2); ctx.lineTo(px2 + 7, py2 - 11); ctx.lineTo(px2 + 1, py2 - 5.5);
-      ctx.fill();
+      ctx.arc(px3, py3, 5.5, 0, Math.PI * 2);
+      ctx.moveTo(px3 - 5.5, py3 - 2); ctx.lineTo(px3 - 6.5, py3 - 10); ctx.lineTo(px3 - 1, py3 - 5);
+      ctx.moveTo(px3 + 5.5, py3 - 2); ctx.lineTo(px3 + 6.5, py3 - 10); ctx.lineTo(px3 + 1, py3 - 5);
+      ctx.stroke();
       ctx.restore();
     }
-    // labels
+
+    // labels: small caps ink
     if (i === mapSel) {
       drawCat(ctx, x + w / 2, y - 6, 1, globalT * 0.03, 0, { grounded: true });
-      ctx.fillStyle = '#eaffff';
-      ctx.font = '14px monospace';
-      ctx.fillText(lv.name, x + w / 2, y + h + 18);
+      ctx.fillStyle = '#e8f2fa';
+      ctx.font = '13px Georgia, serif';
+      ctx.fillText(lv.name, x + w / 2, y + h + 17);
     } else if (!locked) {
-      ctx.fillStyle = 'rgba(180,205,230,0.55)';
-      ctx.font = '10px monospace';
+      ctx.fillStyle = 'rgba(175,195,215,0.6)';
+      ctx.font = '10px Georgia, serif';
       ctx.fillText(lv.name, x + w / 2, y + h + 14);
     }
   });
 
-  // leaderboard for the selected chamber
+  // leaderboard: inked side table
   if (board && boardLevel === mapSel && board.top && board.top.length) {
-    const bx = W - 175, by = 110;
+    const bx = W - 168, by = 108;
     ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(255,205,130,0.9)';
-    ctx.font = '13px monospace';
+    ctx.strokeStyle = 'rgba(255,205,130,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bx - 12, by - 16);
+    ctx.lineTo(bx - 12, by + 24 + Math.min(6, board.top.length) * 17);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,215,150,0.85)';
+    ctx.font = '12px Georgia, serif';
     ctx.fillText('TOP ECHOES', bx, by);
-    ctx.font = '12px monospace';
+    ctx.font = '11px monospace';
     board.top.slice(0, 6).forEach((r, i) => {
-      ctx.fillStyle = i === 0 ? '#ffe2b0' : 'rgba(200,220,240,0.75)';
-      ctx.fillText(`${(r.name + '   ').slice(0, 3)} ${r.lives}♥ ${(r.ticks / 60).toFixed(1)}s`, bx, by + 20 + i * 17);
+      ctx.fillStyle = i === 0 ? '#ffe2b0' : 'rgba(195,210,230,0.7)';
+      ctx.fillText(`${(r.name + '   ').slice(0, 3)} ${r.lives}♥ ${(r.ticks / 60).toFixed(1)}s`, bx, by + 18 + i * 16);
     });
-    ctx.fillStyle = 'rgba(140,180,215,0.5)';
-    ctx.fillText(`${board.total} clears worldwide`, bx, by + 28 + Math.min(6, board.top.length) * 17);
+    ctx.fillStyle = 'rgba(150,170,195,0.5)';
+    ctx.fillText(`${board.total} clears worldwide`, bx, by + 26 + Math.min(6, board.top.length) * 16);
     ctx.textAlign = 'center';
   }
 
-  ctx.fillStyle = 'rgba(160,200,235,0.6)';
-  ctx.font = '14px monospace';
-  ctx.fillText('←→ choose · ENTER descend' + (isMuted() ? ' · M unmute' : ' · M mute'), W / 2, H - 20);
+  // controls: quiet corner note
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(150,170,195,0.5)';
+  ctx.font = '11px monospace';
+  ctx.fillText('←→ choose · ENTER descend' + (isMuted() ? ' · M unmute' : ' · M mute'), 18, H - 14);
+  ctx.textAlign = 'center';
 }
 
 function typewriterLines(lines, chars, y0, lineH, font, color) {
