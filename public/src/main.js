@@ -519,20 +519,9 @@ function drawHud() {
 }
 
 function drawTitle() {
-  fx.drawBackground(ctx, W, H, globalT, 2);
-
-  // slow-turning loom ring behind the cat
-  ctx.save();
-  ctx.translate(W / 2, 240);
-  ctx.rotate(globalT * 0.003);
-  ctx.strokeStyle = 'rgba(110,200,255,0.14)';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 3; i++) {
-    ctx.beginPath();
-    ctx.arc(0, 0, 90 + i * 26, i, i + Math.PI * 1.4);
-    ctx.stroke();
-  }
-  ctx.restore();
+  r3d.renderMenu(globalT);
+  ctx.fillStyle = 'rgba(4,6,12,0.5)';
+  ctx.fillRect(0, 0, W, H);
 
   ctx.save();
   ctx.translate(W / 2, 285);
@@ -562,7 +551,9 @@ function drawTitle() {
 }
 
 function drawMap() {
-  fx.drawBackground(ctx, W, H, globalT, 4);
+  r3d.renderMenu(globalT);
+  ctx.fillStyle = 'rgba(4,6,12,0.62)';
+  ctx.fillRect(0, 0, W, H);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#bfe8ff';
   ctx.font = 'bold 26px monospace';
@@ -638,7 +629,9 @@ function typewriterLines(lines, chars, y0, lineH, font, color) {
 }
 
 function drawStory() {
-  fx.drawBackground(ctx, W, H, globalT, levelIdx);
+  r3d.renderMenu(globalT);
+  ctx.fillStyle = 'rgba(4,6,12,0.68)';
+  ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(150,200,240,0.5)';
   ctx.font = '14px monospace';
   ctx.textAlign = 'center';
@@ -650,7 +643,9 @@ function drawStory() {
 }
 
 function drawEnding() {
-  fx.drawBackground(ctx, W, H, globalT, endingKind === 'stay' ? 8 : 0);
+  r3d.renderMenu(globalT);
+  ctx.fillStyle = endingKind === 'stay' ? 'rgba(20,12,6,0.6)' : 'rgba(4,6,12,0.62)';
+  ctx.fillRect(0, 0, W, H);
 
   if (endingKind === 'stay') {
     // curled cat, ghosts circling

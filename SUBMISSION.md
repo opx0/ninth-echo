@@ -4,7 +4,7 @@
 
 **Tagline:** A 15-second loop. Nine lives. One way out.
 
-**Playable link:** https://opx0.github.io/ninth-life/
+**Playable link:** https://game.opxz.dev
 **Repo:** https://github.com/opx0/ninth-life
 
 ---
@@ -26,16 +26,25 @@ your last run, input for input. Echoes hold pressure plates, shove crates and
 stand in spike pits so the current you can get through. Nine lives per
 chamber, ten chambers, and a final choice with **two different endings**.
 
+And you are never alone: when you clear a chamber, your winning runs upload —
+other players see your **golden echo cat** solving the room alongside them in
+real time, and race your clear on the per-chamber leaderboard. Deterministic
+replay makes a whole run just a few hundred bytes.
+
 ## How we built it
 
-Vanilla JavaScript, Canvas 2D and WebAudio — zero dependencies, no engine, no
-build step, no asset files. The core is a deterministic fixed-timestep
-simulation (60 Hz): player input is recorded per tick as a bitmask, and a
-ghost is just that byte array replayed through identical physics in an
-identical tick order. The rewind cutscene plays your *actual* recorded history
-backwards. All sound — including the ambient score and the meow — is
-synthesized with oscillators and filtered noise at runtime. The cat is drawn
-procedurally (bezier tail, squash & stretch, blinking).
+The core is a deterministic fixed-timestep simulation (60 Hz) in vanilla
+JavaScript: input recorded per tick as a bitmask; a ghost is that byte array
+replayed through identical physics in an identical tick order. On top sits a
+**three.js WebGL presentation layer** — bloom, dynamic lights, depth-extruded
+chambers, particles — that only *reads* sim state, so visuals can never
+desync a replay. The rewind cutscene plays your actual recorded history
+backwards. All sound — the drone score, the tape-rewind sweep, the meow — is
+synthesized with WebAudio at runtime; there is not a single asset file. The
+cat is drawn procedurally onto a canvas texture billboarded into the scene.
+Online: Node/Express on **Google Cloud Run** with **Firestore**, serving the
+game at **game.opxz.dev** and powering world echoes + leaderboards, with an
+in-memory fallback so the demo can never die mid-judging.
 
 ## Challenges we ran into
 
@@ -63,7 +72,7 @@ get ghosts, rewind cinematics, and automated playtesting nearly for free.
 More paradox rooms (echo-vs-echo interference is barely explored), speedrun
 timer, and touch controls.
 
-**Built with:** javascript, html5-canvas, webaudio, github-pages
+**Built with:** javascript, three.js, webgl, webaudio, node.js, express, google-cloud-run, firestore
 
 ---
 
@@ -84,8 +93,9 @@ browser tab, full screen the game first.
    socket), SACRIFICE (drop an echo into the pit, jump over it).
 4. **1:15–1:50 — The showpiece (chamber 9, PARADOX).** Show three echoes
    working at once: one holding the door, one pushing the crate and climbing.
-   Narrate the determinism tech in one sentence: "No engine, no assets —
-   deterministic replay of recorded inputs, all vanilla JS."
+   Narrate: "Deterministic replay of recorded inputs — and it's online:
+   that golden cat is a real player's winning run, replaying live in my room."
+   Point at the leaderboard on the map screen.
 5. **1:50–2:20 — The choice.** Chamber 10: pan between the cold exit and the
    warm exit. Pick one, let the ending text type out.
 6. **2:20–2:40 — End card.** Map screen (all rooms lit), then title. Voice:

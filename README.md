@@ -2,9 +2,9 @@
 
 *A 15-second loop. Nine lives. One way out.*
 
-**▶ Play it: https://opx0.github.io/ninth-life/**
+**▶ Play it: https://game.opxz.dev**
 
-Made in ~24 hours for **BTT Web Game Jam — Summer 2026**.
+Made in ~30 hours for **BTT Web Game Jam — Summer 2026**.
 
 ![title](shots/title.png)
 
@@ -22,6 +22,16 @@ chamber. Spend them wisely.
 At the heart of the Loom, the game asks you one question — and it has **two
 endings**.
 
+## World echoes — you are never alone
+
+When you clear a chamber, your winning runs upload (three arcade letters and
+all). Other players then see your **golden echo cat** solving the room
+alongside them, live, and race your time on the per-chamber leaderboard.
+This works because the simulation is *deterministic*: an echo is just a byte
+array of inputs replayed through identical physics — on anyone's machine.
+Remote echoes run in a sandboxed shadow world, so they can never touch your
+puzzle.
+
 ![paradox](shots/paradox.png)
 
 ## Controls
@@ -36,25 +46,27 @@ endings**.
 
 Desktop keyboard only — no touch controls.
 
-## How it works (for the technically curious)
+## How it works
 
-**Zero dependencies. No engine. No build step. No asset files.** Everything is
-hand-rolled vanilla JavaScript + Canvas 2D + WebAudio:
-
-- **Deterministic fixed-timestep simulation** (60 Hz accumulator loop). Input
-  is recorded per tick as a bitmask; a ghost is just that byte array replayed
-  through the exact same physics. This is what makes echoes perfectly
-  faithful — same tick order (boxes → ghosts oldest-first → player →
-  plates/doors), same floating-point math, every loop.
-- **The rewind effect is real**: every tick snapshots actor + world state, and
-  the rewind animation plays your actual history backwards.
-- **All audio is synthesized** — jumps, plates, the tape-rewind sweep, the
-  ambient drone-and-arpeggio score, even the meow: oscillators and filtered
-  noise, not a single audio file.
-- **The cat is drawn in code** — bezier tail, squash & stretch, blinking.
-- Every level was **proven solvable by a scripted bot** driving the real
-  physics through the full multi-ghost solution before ship (see commit
-  history).
+- **Deterministic fixed-timestep core** (60 Hz, vanilla JS): input recorded
+  per tick as a bitmask; ghosts replay that byte array through the exact same
+  tick order (boxes → ghosts oldest-first → player → plates/doors). No
+  randomness, no wall-clock, no physics library — determinism is the game.
+- **three.js WebGL presentation**: bloom post-processing, dynamic point
+  lights, depth-extruded chambers, particle systems, a camera that leans
+  toward the cat. The render layer only *reads* sim state — it can never
+  desync a replay.
+- **The rewind is real**: every tick snapshots the world; the rewind cutscene
+  plays your actual history backwards.
+- **All audio synthesized** at runtime with WebAudio — the drone score, the
+  tape-rewind sweep, the meow. Zero asset files.
+- **The cat is code**: bezier tail, squash & stretch, blinking — drawn to a
+  canvas texture billboarded into the WebGL scene.
+- **Server**: Node/Express on Google Cloud Run with Firestore for clears and
+  echoes, in-memory fallback if Firestore blinks, static files from the same
+  service at `game.opxz.dev`.
+- Every level is **machine-proven solvable**: a scripted bot drives the real
+  physics through the full multi-ghost solutions (see commit history).
 
 ![rewind](shots/rewind.png)
 
@@ -64,6 +76,13 @@ Ten rooms, each teaching the loop a new trick: holding, chaining, weighing,
 sacrificing, ascending, marching, and one paradox. Then the choice.
 
 ![map](shots/map.png)
+
+## Run it yourself
+
+```
+npm install
+npm start          # http://localhost:8080 — works fully offline (in-memory board)
+```
 
 ## Credits
 

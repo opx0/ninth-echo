@@ -23,6 +23,7 @@ let bloomBoost = 0;
 let curWorld = null;
 let loomGroup = null, loomRings = [], loomCore = null, loomLight = null;
 let loomState = 0, loomT = 0;   // 0 idle, 1 breaking, 2 stay
+let menuLoom = null;
 
 const sx = x => x - W / 2;
 const sy = y => H / 2 - y;
@@ -91,6 +92,27 @@ export function init(canvas) {
     sparks.frustumCulled = false;
     scene.add(sparks);
   }
+
+  // ambient Loom shown behind menu screens
+  menuLoom = new THREE.Group();
+  const mcolors = [0x6ee7ff, 0xff7ac8, 0xffb347];
+  for (let i = 0; i < 3; i++) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(70 + i * 30, 2.4, 10, 70),
+      new THREE.MeshStandardMaterial({ color: mcolors[i], emissive: mcolors[i], emissiveIntensity: 0.55, roughness: 0.35, transparent: true, opacity: 0.85 }));
+    ring.userData.axis = new THREE.Vector3(Math.sin(i * 2.1), Math.cos(i * 1.3), 0.7).normalize();
+    ring.userData.speed = 0.004 + i * 0.003;
+    menuLoom.add(ring);
+  }
+  const mcore = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(17, 1),
+    new THREE.MeshStandardMaterial({ color: 0xeaffff, emissive: 0xbfe8ff, emissiveIntensity: 0.8, roughness: 0.2 }));
+  menuLoom.add(mcore);
+  const mlight = new THREE.PointLight(0x9fd8ff, 6500, 500);
+  mlight.position.z = 70;
+  menuLoom.add(mlight);
+  menuLoom.position.set(0, 30, -60);
+  scene.add(menuLoom);
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -354,6 +376,9 @@ export function boostBloom() { bloomBoost = 1; }
 // cats: [{x,y,face,phase,vy,opts,z}]
 export function render(t, world, cats, playerX, playerY) {
   if (!renderer) return;
+  if (menuLoom) menuLoom.visible = false;
+  if (levelGroup) levelGroup.visible = true;
+  if (sparks) sparks.visible = true;
 
   // doors follow sim state
   world.doors.forEach((d, i) => {
@@ -472,6 +497,33 @@ export function render(t, world, cats, playerX, playerY) {
   bloom.strength = 0.75 + bloomBoost * 1.6;
   if (bloomBoost > 0) bloomBoost = Math.max(0, bloomBoost - 0.03);
 
+  composer.render();
+}
+
+export function renderMenu(t) {
+  if (!renderer) return;
+  if (levelGroup) levelGroup.visible = false;
+  if (sparks) sparks.visible = false;
+  menuLoom.visible = true;
+  menuLoom.children.forEach(o => { if (o.userData.axis) o.rotateOnAxis(o.userData.axis, o.userData.speed); });
+  menuLoom.rotation.z = Math.sin(t * 0.002) * 0.1;
+  // dust + threads still alive
+  for (const line of threads) {
+    const arr = line.geometry.attributes.position.array;
+    const seed = line.userData.seed;
+    const bx = sx(((seed * 137) % W + W) % W);
+    for (let sI = 0; sI < arr.length / 3; sI++) arr[sI * 3] = bx + Math.sin(sI * 0.4 + t * 0.012 + seed) * 16;
+    line.geometry.attributes.position.needsUpdate = true;
+  }
+  const arr = dust.geometry.attributes.position.array;
+  for (let i = 0; i < dustVel.length; i++) {
+    arr[i * 3 + 1] += dustVel[i];
+    if (arr[i * 3 + 1] > H / 2 + 20) arr[i * 3 + 1] = -H / 2 - 20;
+  }
+  dust.geometry.attributes.position.needsUpdate = true;
+  camera.position.x *= 0.95; camera.position.y *= 0.95;
+  camera.lookAt(0, 0, 0);
+  bloom.strength = 0.8;
   composer.render();
 }
 
