@@ -8,8 +8,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: '256kb' }));
 
-const db = new Firestore();
-const clears = db.collection('clears');
+let clears = null;
+try { clears = new Firestore().collection('clears'); } catch (e) { console.error('firestore init failed', e.message); }
+// In-memory fallback keeps the API alive even if Firestore misbehaves mid-demo.
+const mem = [];
+async function saveClear(doc) {
+  mem.push(doc);
+  if (mem.length > 2000) mem.shift();
+  if (clears) { try { await clears.add(doc); } catch (e) { console.error('fs add, disabling firestore:', e.message); clears = null; } }
+}
+async function loadClears(level, version) {
+  if (clears) {
+    try {
+      const snap = await clears.where('level', '==', level).where('v', '==', version)
+        .orderBy('at', 'desc').limit(200).get();
+      if (!snap.empty) return snap.docs.map(d => d.data());
+    } catch (e) { console.error('fs query, disabling firestore:', e.message); clears = null; }
+  }
+  return mem.filter(d => d.level === level && d.v === version);
+}
 
 const GAME_VERSION = 2;           // bump when level data changes; stale ghosts are filtered out
 const NAME_RE = /^[A-Z0-9]{1,3}$/;
@@ -29,7 +46,7 @@ app.post('/api/clear', async (req, res) => {
     for (const g of ghosts) {
       if (typeof g !== 'string' || g.length > 4000 || !/^[A-Za-z0-9+/=]*$/.test(g)) return res.status(400).json({ error: 'ghost' });
     }
-    await clears.add({ level, name, lives, ticks, ghosts, v, at: Date.now() });
+    await saveClear({ level, name, lives, ticks, ghosts, v, at: Date.now() });
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -42,9 +59,7 @@ app.get('/api/board/:level', async (req, res) => {
   try {
     const level = parseInt(req.params.level, 10);
     if (!Number.isInteger(level) || level < 0 || level > 9) return res.status(400).json({ error: 'level' });
-    const snap = await clears.where('level', '==', level).where('v', '==', GAME_VERSION)
-      .orderBy('at', 'desc').limit(200).get();
-    const all = snap.docs.map(d => d.data());
+    const all = await loadClears(level, GAME_VERSION);
     all.sort((a, b) => a.lives - b.lives || a.ticks - b.ticks);
     const top = all.slice(0, 8).map(({ name, lives, ticks }) => ({ name, lives, ticks }));
     // world echoes: up to 3 distinct best runs with recordings
@@ -57,8 +72,10 @@ app.get('/api/board/:level', async (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: '60s',
-  setHeaders: (r, p) => { if (p.includes('/vendor/')) r.setHeader('Cache-Control', 'public, max-age=86400'); },
+  etag: true,
+  setHeaders: (r, p) => {
+    r.setHeader('Cache-Control', p.includes('/vendor/') ? 'public, max-age=86400' : 'no-cache');
+  },
 }));
 
 const port = process.env.PORT || 8080;

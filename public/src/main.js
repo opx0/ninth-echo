@@ -4,6 +4,7 @@ import { Actor, drawCat, L, R, J } from './actors.js';
 import * as fx from './fx.js';
 import * as r3d from './render3d.js';
 import { ensure as audioEnsure, sfx, toggleMute, isMuted } from './audio.js';
+import { submitClear, fetchBoard } from './net.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -62,6 +63,29 @@ let mapSel = 0;
 let unlocked = Math.min(parseInt(localStorage.getItem('ninthlife_unlocked') || '0', 10), LEVELS.length - 1);
 mapSel = unlocked;
 
+let totalTicks = 0;
+let playerName = localStorage.getItem('ninthlife_name') || '';
+let nameChars = '';
+let submitted = false;
+let board = null, boardLevel = -1;
+let worldEchoes = [];   // [{name, world, recs, actors}]
+
+function loadBoardFor(level) {
+  fetchBoard(level).then(b => { if (b) { board = b; boardLevel = level; } });
+}
+
+function makeShadow(echo, idx) {
+  const w = new World(LEVELS[idx]);
+  return { name: echo.name, world: w, recs: echo.ghosts, actors: echo.ghosts.map(() => new Actor(w, true)) };
+}
+
+function resetShadows() {
+  for (const se of worldEchoes) {
+    se.world.resetLoop();
+    se.actors = se.recs.map(() => new Actor(se.world, true));
+  }
+}
+
 // ---------- flow ----------
 function enterLevel(idx) {
   levelIdx = idx;
@@ -71,6 +95,16 @@ function enterLevel(idx) {
   ghosts = [];
   lives = LIVES;
   storyChars = 0;
+  totalTicks = 0;
+  submitted = false;
+  nameChars = '';
+  worldEchoes = [];
+  fetchBoard(idx).then(b => {
+    if (!b || levelIdx !== idx) return;
+    worldEchoes = b.echoes.slice(0, 2).map(e => makeShadow(e, idx));
+    resetShadows();
+    console.log('world echoes loaded:', worldEchoes.map(se => se.name).join(','));
+  }).catch(e => console.error('echo load failed', e));
   newLoop();
   state = 'story';
 }
@@ -85,6 +119,7 @@ function newLoop() {
   history = [];
   doorSfxDone = world.doors.map(() => false);
   lastWarnSec = -1;
+  resetShadows();
   state = 'play';
 }
 
@@ -111,6 +146,13 @@ function resetRoom() {
   newLoop();
 }
 
+// debug introspection (harmless in prod)
+Object.defineProperty(window, 'NL', { value: {
+  get state() { return state; },
+  get echoes() { return worldEchoes.map(se => ({ name: se.name, n: se.actors.length, a: se.actors.map(x => [x.x | 0, x.y | 0, x.alive, x.frozen]) })); },
+  get tick() { return loopTick; },
+} });
+
 // ---------- ticking ----------
 function tick() {
   globalT++;
@@ -122,8 +164,9 @@ function tick() {
       state = 'map';
     }
   } else if (state === 'map') {
-    if (wasPressed('ArrowLeft') || wasPressed('KeyA')) { mapSel = Math.max(0, mapSel - 1); sfxSafe(() => sfx.step()); }
-    if (wasPressed('ArrowRight') || wasPressed('KeyD')) { mapSel = Math.min(unlocked, mapSel + 1); sfxSafe(() => sfx.step()); }
+    if (boardLevel !== mapSel && globalT % 30 === 0) loadBoardFor(mapSel);
+    if (wasPressed('ArrowLeft') || wasPressed('KeyA')) { mapSel = Math.max(0, mapSel - 1); sfxSafe(() => sfx.step()); loadBoardFor(mapSel); }
+    if (wasPressed('ArrowRight') || wasPressed('KeyD')) { mapSel = Math.min(unlocked, mapSel + 1); sfxSafe(() => sfx.step()); loadBoardFor(mapSel); }
     if (wasPressed('Enter') || wasPressed('Space')) { sfxSafe(() => sfx.plateOn()); enterLevel(mapSel); }
   } else if (state === 'story') {
     storyChars += 1.2;
@@ -138,8 +181,34 @@ function tick() {
     rewindPos -= rewindStep;
     if (rewindPos <= 0) finishRewind();
   } else if (state === 'clear') {
+    if (!playerName) {
+      // first clear ever: arcade initials
+      for (const code of pressed) {
+        if (/^Key[A-Z]$/.test(code) && nameChars.length < 3) { nameChars += code.slice(3); sfxSafe(() => sfx.step()); }
+        else if (/^Digit[0-9]$/.test(code) && nameChars.length < 3) { nameChars += code.slice(5); sfxSafe(() => sfx.step()); }
+        else if (code === 'Backspace') nameChars = nameChars.slice(0, -1);
+        else if (code === 'Enter' && nameChars.length >= 1) {
+          playerName = nameChars;
+          localStorage.setItem('ninthlife_name', playerName);
+          sfxSafe(() => sfx.plateOn());
+        }
+      }
+      pressed.clear();
+      clearT = Math.min(clearT + 1, 35);
+      return;
+    }
+    if (!submitted) {
+      submitted = true;
+      const runs = ghosts.map(g => g.rec.slice(0, g.len));
+      runs.push(recording.slice(0, recLen));
+      submitClear({
+        level: levelIdx, name: playerName,
+        lives: Math.max(1, LIVES - lives + 1),
+        ticks: Math.max(30, totalTicks),
+        ghosts: runs.slice(-9),
+      });
+    }
     clearT++;
-    if (clearT === 1) sfxSafe(() => sfx.win());
     if (clearT > 140) {
       if (LEVELS[levelIdx].finale) {
         endingKind = clearKind === 'stay' ? 'stay' : 'break';
@@ -167,11 +236,36 @@ function tick() {
   pressed.clear();
 }
 
+const DEBUG_MODE = new URLSearchParams(location.search).has('debug');
+
 function tickPlay() {
   if (wasPressed('Escape')) { state = 'map'; return; }
+  if (DEBUG_MODE && wasPressed('KeyK')) {
+    const e = world.exits[0];
+    clearT = 0; clearKind = e.kind;
+    sfxSafe(() => sfx.win());
+    state = 'clear';
+    return;
+  }
 
   const mask = moveMask();
   if (recLen < LOOP_TICKS) recording[recLen++] = mask;
+  totalTicks++;
+
+  // world echoes replay in their own shadow worlds — they can never touch your puzzle
+  for (const se of worldEchoes) {
+    se.world.tickBoxes();
+    const shAlive = [];
+    se.actors.forEach((a, i) => {
+      const rec = se.recs[i];
+      if (!a.alive) { a.tick(0); return; }
+      a.frozen = loopTick >= rec.length;
+      a.tick(a.frozen ? 0 : rec[loopTick]);
+      if (!a.frozen && se.world.hitsSpike(a)) a.die();
+      if (a.alive) shAlive.push(a);
+    });
+    se.world.tickPlatesAndDoors(shAlive);
+  }
 
   world.tickBoxes();
 
@@ -220,6 +314,10 @@ function tickPlay() {
       clearT = 0;
       clearKind = e.kind;
       r3d.burst(e.c * TILE + TILE / 2, e.r * TILE + TILE / 2, e.kind === 'stay' ? 0xffcf8a : 0xeaffff, 34, 4, 55);
+      sfxSafe(() => sfx.win());
+      if (LEVELS[levelIdx].finale) {
+        if (e.kind === 'stay') r3d.loomStay(); else { r3d.loomBreak(); sfxSafe(() => sfx.death()); }
+      }
       state = 'clear';
       return;
     }
@@ -277,6 +375,14 @@ function drawScene() {
     }
     r3d.streaks();
   } else {
+    for (const se of worldEchoes) {
+      const a = se.actors[se.actors.length - 1];
+      if (!a || !a.alive) continue;
+      cats.push({
+        x: a.x + a.w / 2, y: a.y + a.h, face: a.face, phase: a.phase, vy: a.vy, z: 3,
+        opts: { ghost: true, remote: true, frozen: a.frozen, grounded: a.grounded, running: a.grounded && Math.abs(a.vx) > 0.3, alpha: 0.34 },
+      });
+    }
     ghostActors.forEach(a => {
       if (!a.alive && a.deathT > 40) return;
       cats.push({
@@ -313,10 +419,19 @@ function drawScene() {
     ctx.font = '34px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(LEVELS[levelIdx].finale ? '...' : 'CHAMBER CLEARED', W / 2, H / 2 - 10);
-    if (!LEVELS[levelIdx].finale) {
-      ctx.font = '16px monospace';
-      ctx.fillStyle = '#8fb8d8';
-      ctx.fillText(`lives spent here: ${LIVES - lives + 1}`, W / 2, H / 2 + 24);
+    ctx.font = '16px monospace';
+    ctx.fillStyle = '#8fb8d8';
+    if (!playerName) {
+      const slots = (nameChars + '___').slice(0, 3).split('').join(' ');
+      ctx.fillText('leave your mark (3 letters):', W / 2, H / 2 + 24);
+      ctx.font = '28px monospace';
+      ctx.fillStyle = '#eaffff';
+      ctx.fillText(slots, W / 2, H / 2 + 58);
+      ctx.font = '13px monospace';
+      ctx.fillStyle = '#7fa8c8';
+      ctx.fillText('type letters \u00b7 ENTER to confirm \u2014 your echo joins the world', W / 2, H / 2 + 84);
+    } else if (!LEVELS[levelIdx].finale) {
+      ctx.fillText(`lives spent here: ${LIVES - lives + 1} \u00b7 time ${(totalTicks / 60).toFixed(1)}s`, W / 2, H / 2 + 24);
     }
     ctx.globalAlpha = 1;
   }
@@ -352,6 +467,12 @@ function drawHud() {
     ctx.moveTo(x + 6, y - 3); ctx.lineTo(x + 6, y - 10); ctx.lineTo(x + 1, y - 5.5);
     ctx.fill();
     ctx.restore();
+  }
+  if (worldEchoes.length) {
+    ctx.fillStyle = 'rgba(255,205,130,0.75)';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('world echoes: ' + worldEchoes.map(se => se.name).join(' \u00b7 '), 22, 48);
   }
   if (noLivesFlash > 0 && (noLivesFlash >> 2) % 2 === 0) {
     ctx.fillStyle = '#ff9f9f';

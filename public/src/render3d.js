@@ -21,6 +21,8 @@ let threads = [];
 let shakeMag = 0;
 let bloomBoost = 0;
 let curWorld = null;
+let loomGroup = null, loomRings = [], loomCore = null, loomLight = null;
+let loomState = 0, loomT = 0;   // 0 idle, 1 breaking, 2 stay
 
 const sx = x => x - W / 2;
 const sy = y => H / 2 - y;
@@ -251,8 +253,36 @@ export function buildLevel(world) {
     exitPulse.push({ grp, mat, glow, warm });
   }
 
+  // finale: the Loom itself hangs over the chamber
+  loomGroup = null; loomRings = []; loomState = 0; loomT = 0;
+  if (world.def && world.def.finale) {
+    loomGroup = new THREE.Group();
+    const colors = [0x6ee7ff, 0xff7ac8, 0xffb347];
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(52 + i * 22, 2.2, 10, 60),
+        new THREE.MeshStandardMaterial({ color: colors[i], emissive: colors[i], emissiveIntensity: 0.8, roughness: 0.3, transparent: true }));
+      ring.userData.axis = new THREE.Vector3(Math.sin(i * 2.1), Math.cos(i * 1.3), 0.6 + i * 0.2).normalize();
+      ring.userData.speed = 0.006 + i * 0.004;
+      loomGroup.add(ring);
+      loomRings.push(ring);
+    }
+    loomCore = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(15, 1),
+      new THREE.MeshStandardMaterial({ color: 0xeaffff, emissive: 0xbfe8ff, emissiveIntensity: 1.1, roughness: 0.2, transparent: true }));
+    loomGroup.add(loomCore);
+    loomLight = new THREE.PointLight(0x9fd8ff, 9000, 460);
+    loomLight.position.z = 60;
+    loomGroup.add(loomLight);
+    loomGroup.position.set(0, 90, -20);
+    levelGroup.add(loomGroup);
+  }
+
   scene.add(levelGroup);
 }
+
+export function loomBreak() { if (loomGroup) { loomState = 1; loomT = 0; } }
+export function loomStay() { if (loomGroup) { loomState = 2; loomT = 0; } }
 
 function disposeGroup(g) {
   g.traverse(o => {
@@ -361,9 +391,36 @@ export function render(t, world, cats, playerX, playerY) {
     if (i < cats.length) {
       const c = cats[i];
       drawCatSprite(slot, c.x, c.y, c.face, c.phase, c.vy || 0, c.opts, c.z ?? 6);
-      slot.mesh.material.opacity = c.opts.alpha ?? 1;
+      slot.mesh.material.opacity = 1;   // alpha already applied inside drawCat
     } else slot.mesh.visible = false;
   });
+
+  // the Loom turns
+  if (loomGroup) {
+    loomT++;
+    const spin = loomState === 1 ? 1 + loomT * 0.12 : loomState === 2 ? 0.35 : 1;
+    loomRings.forEach(r => { r.rotateOnAxis(r.userData.axis, r.userData.speed * spin); });
+    if (loomCore) loomCore.rotation.y += 0.01 * spin;
+    if (loomState === 1) {
+      // shatter: rings fly apart and fade, core collapses
+      const k = Math.min(1, loomT / 90);
+      loomRings.forEach((r, i) => {
+        r.scale.setScalar(1 + k * (1.5 + i * 0.7));
+        r.material.opacity = 1 - k;
+        r.material.emissiveIntensity = 0.8 + k * 2.5;
+      });
+      if (loomCore) { loomCore.scale.setScalar(Math.max(0.05, 1 - k * 1.1)); loomCore.material.emissiveIntensity = 1.1 + k * 4; }
+      if (loomLight) loomLight.intensity = 9000 + k * 30000 * (1 - k);
+      if (loomT % 6 === 0 && k < 0.9) burst(W / 2 + (Math.random() - 0.5) * 160, 180 + (Math.random() - 0.5) * 120, [0x6ee7ff, 0xff7ac8, 0xffb347][loomT % 3], 10, 4, 40);
+      if (loomT === 1) { shakeMag = 14; bloomBoost = 1; }
+    } else if (loomState === 2) {
+      // warm down: amber calm
+      const k = Math.min(1, loomT / 120);
+      loomRings.forEach(r => { r.material.emissive.lerp(new THREE.Color(0xffc87a), 0.02); });
+      if (loomCore) loomCore.material.emissive.lerp(new THREE.Color(0xffd9a0), 0.02);
+      if (loomLight) loomLight.color.lerp(new THREE.Color(0xffc87a), 0.02);
+    }
+  }
 
   // threads sway
   for (const line of threads) {

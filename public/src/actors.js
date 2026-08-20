@@ -164,13 +164,13 @@ export function drawCat(ctx, cx, cy, face, phase, vy, o = {}) {
   ctx.scale(sx, sy);
 
   const bob = o.running ? Math.sin(phase * 2) * 1.5 : Math.sin(phase) * 0.8;
-  const bodyFill = o.ghost ? 'rgba(140,230,255,0.20)' : '#0c1018';
-  const rim = o.ghost ? 'rgba(150,235,255,0.85)' : 'rgba(110,210,255,0.35)';
+  const bodyFill = o.remote ? 'rgba(255,210,140,0.16)' : o.ghost ? 'rgba(140,230,255,0.20)' : '#0c1018';
+  const rim = o.remote ? 'rgba(255,205,130,0.8)' : o.ghost ? 'rgba(150,235,255,0.85)' : 'rgba(110,210,255,0.35)';
 
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = rim;
   ctx.fillStyle = bodyFill;
-  if (o.ghost || o.frozen) { ctx.shadowColor = '#7fe3ff'; ctx.shadowBlur = 12; }
+  if (o.ghost || o.frozen) { ctx.shadowColor = o.remote ? '#ffc87a' : '#7fe3ff'; ctx.shadowBlur = 12; }
 
   // tail
   const tw = Math.sin(phase * (o.running ? 2 : 1)) * 6;
@@ -222,8 +222,8 @@ export function drawCat(ctx, cx, cy, face, phase, vy, o = {}) {
   } else {
     const blink = Math.sin(phase * 0.7) > 0.97 ? 0.25 : 1;
     ctx.save();
-    ctx.fillStyle = o.ghost ? '#dffaff' : '#a5f3ff';
-    ctx.shadowColor = '#7fe3ff';
+    ctx.fillStyle = o.remote ? '#ffe2b0' : o.ghost ? '#dffaff' : '#a5f3ff';
+    ctx.shadowColor = o.remote ? '#ffc87a' : '#7fe3ff';
     ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.ellipse(hx + 2, hy - 0.5, 1.7, 2.2 * blink, 0, 0, Math.PI * 2);
