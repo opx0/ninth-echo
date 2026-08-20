@@ -524,10 +524,10 @@ function drawEnding() {
     // curled cat, ghosts circling
     for (let i = 0; i < 8; i++) {
       const a = globalT * 0.008 + (i / 8) * Math.PI * 2;
-      drawCat(ctx, W / 2 + Math.cos(a) * 130, 300 + Math.sin(a) * 46, Math.cos(a) > 0 ? 1 : -1, globalT * 0.02 + i, 0, { ghost: true, alpha: 0.4, grounded: true });
+      drawCat(ctx, W / 2 + Math.cos(a) * 130, 400 + Math.sin(a) * 46, Math.cos(a) > 0 ? 1 : -1, globalT * 0.02 + i, 0, { ghost: true, alpha: 0.4, grounded: true });
     }
     ctx.save();
-    ctx.translate(W / 2, 310);
+    ctx.translate(W / 2, 410);
     ctx.scale(2.2, 2.2);
     drawCat(ctx, 0, 0, 1, globalT * 0.01, 0, { grounded: true });
     ctx.restore();
@@ -540,7 +540,7 @@ function drawEnding() {
     ctx.fillRect(0, 0, W, H);
     const wx = Math.min(W - 200, 200 + (globalT % 100000) * 0.0);
     ctx.save();
-    ctx.translate(W / 2 + Math.sin(globalT * 0.002) * 4, 330);
+    ctx.translate(W / 2 + Math.sin(globalT * 0.002) * 4, 410);
     ctx.scale(2.2, 2.2);
     drawCat(ctx, 0, 0, 1, globalT * 0.06, 0, { grounded: true, running: true });
     ctx.restore();
