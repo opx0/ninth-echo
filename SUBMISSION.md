@@ -1,11 +1,11 @@
 # Devpost submission — copy-paste kit
 
-**Project name:** NINTH LIFE
+**Project name:** THE NINTH ECHO
 
 **Tagline:** A 15-second loop. Nine lives. One way out.
 
 **Playable link:** https://game.opxz.dev
-**Repo:** https://github.com/opx0/ninth-life
+**Repo:** https://github.com/opx0/ninth-echo
 
 ---
 
@@ -20,7 +20,7 @@ Infamous 2's sacrifice finale.
 
 ## What it does
 
-NINTH LIFE is a time-loop puzzle-platformer. Each chamber runs a 15-second
+THE NINTH ECHO is a time-loop puzzle-platformer. Each chamber runs a 15-second
 loop. Press R and time rewinds — but a life stays behind: an echo that repeats
 your last run, input for input. Echoes hold pressure plates, shove crates and
 stand in spike pits so the current you can get through. Nine lives per
@@ -85,7 +85,7 @@ Record at 1080p with game audio ON (the audio is a feature). OBS: capture the
 browser tab, full screen the game first.
 
 1. **0:00–0:15 — Cold open.** Title screen. Let the drone play a beat, press
-   ENTER (meow!). Say the one-liner: "Ninth Life — you solve puzzles by
+   ENTER (meow!). Say the one-liner: "The Ninth Echo — you solve puzzles by
    cooperating with your own past lives."
 2. **0:15–0:45 — The hook (chamber 3, ECHO).** Stand on the plate, press R on
    camera. Let the rewind effect play fully. Then walk through the door your
@@ -102,10 +102,10 @@ browser tab, full screen the game first.
 5. **1:50–2:20 — The choice.** Chamber 10: pan between the cold exit and the
    warm exit. Pick one, let the ending text type out.
 6. **2:20–2:40 — End card.** Map screen (all rooms lit), then title. Voice:
-   "Ninth Life — playable in your browser, link below. Both endings are
+   "The Ninth Echo — playable in your browser, link below. Both endings are
    worth it."
 
 Tip: pre-clear rooms 1–8 before recording so the map looks full; use a fresh
 browser profile if you want the tutorial experience instead (progress lives
 in localStorage — DevTools → Application → Local Storage → delete
-`ninthlife_unlocked` to reset).
+`ninthecho_unlocked` to reset).

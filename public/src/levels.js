@@ -1,4 +1,4 @@
-// Level data for NINTH LIFE.
+// Level data for THE NINTH ECHO.
 // Grid: 32 x 18 tiles, 30px each (960x540).
 // Legend:
 //   #  wall          .  empty         S  player start

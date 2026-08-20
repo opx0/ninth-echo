@@ -1,4 +1,4 @@
-# NINTH LIFE
+# THE NINTH ECHO
 
 *A 15-second loop. Nine lives. One way out.*
 

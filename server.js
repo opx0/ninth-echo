@@ -1,4 +1,4 @@
-// NINTH LIFE server: static hosting + echo/leaderboard API on Firestore.
+// THE NINTH ECHO server: static hosting + echo/leaderboard API on Firestore.
 import express from 'express';
 import { Firestore } from '@google-cloud/firestore';
 import path from 'node:path';
@@ -79,4 +79,4 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 const port = process.env.PORT || 8080;
-app.listen(port, () => console.log(`ninth-life on :${port}`));
+app.listen(port, () => console.log(`ninth-echo on :${port}`));

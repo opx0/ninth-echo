@@ -130,21 +130,6 @@ export class Actor {
     this.alive = false;
     this.deathT = 0;
   }
-
-  draw(ctx, alpha = 1) {
-    const cx = this.x + this.w / 2;
-    const cy = this.y + this.h;
-    drawCat(ctx, cx, cy, this.face, this.phase, this.vy, {
-      ghost: this.ghost,
-      frozen: this.frozen,
-      dead: !this.alive,
-      deathT: this.deathT,
-      squash: this.squash,
-      alpha,
-      running: this.grounded && Math.abs(this.vx) > 0.3,
-      grounded: this.grounded,
-    });
-  }
 }
 
 // (cx, cy) = bottom-center of the cat.

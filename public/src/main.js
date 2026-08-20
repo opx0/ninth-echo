@@ -1,7 +1,6 @@
 import { LEVELS, ENDINGS, LIVES, TILE } from './levels.js';
 import { World, LOOP_TICKS } from './world.js';
 import { Actor, drawCat, L, R, J } from './actors.js';
-import * as fx from './fx.js';
 import * as r3d from './render3d.js';
 import { ensure as audioEnsure, sfx, toggleMute, isMuted } from './audio.js';
 import { submitClear, fetchBoard } from './net.js';
@@ -60,11 +59,11 @@ let storyChars = 0;
 let endingKind = 'break', endChars = 0;
 let mapSel = 0;
 
-let unlocked = Math.min(parseInt(localStorage.getItem('ninthlife_unlocked') || '0', 10), LEVELS.length - 1);
+let unlocked = Math.min(parseInt(localStorage.getItem('ninthecho_unlocked') || '0', 10), LEVELS.length - 1);
 mapSel = unlocked;
 
 let totalTicks = 0;
-let playerName = localStorage.getItem('ninthlife_name') || '';
+let playerName = localStorage.getItem('ninthecho_name') || '';
 let nameChars = '';
 let submitted = false;
 let board = null, boardLevel = -1;
@@ -156,7 +155,6 @@ Object.defineProperty(window, 'NL', { value: {
 // ---------- ticking ----------
 function tick() {
   globalT++;
-  fx.tickParticles();
 
   if (state === 'title') {
     if (wasPressed('Enter') || wasPressed('Space')) {
@@ -189,7 +187,7 @@ function tick() {
         else if (code === 'Backspace') nameChars = nameChars.slice(0, -1);
         else if (code === 'Enter' && nameChars.length >= 1) {
           playerName = nameChars;
-          localStorage.setItem('ninthlife_name', playerName);
+          localStorage.setItem('ninthecho_name', playerName);
           sfxSafe(() => sfx.plateOn());
         }
       }
@@ -216,7 +214,7 @@ function tick() {
         state = 'ending';
       } else {
         unlocked = Math.max(unlocked, levelIdx + 1);
-        localStorage.setItem('ninthlife_unlocked', String(unlocked));
+        localStorage.setItem('ninthecho_unlocked', String(unlocked));
         mapSel = Math.min(levelIdx + 1, LEVELS.length - 1);
         state = 'map';
       }
@@ -356,7 +354,7 @@ function draw() {
   else if (state === 'ending') drawEnding();
   else drawScene();
 
-  fx.drawVignette(ctx, W, H);
+  drawVignette();
 }
 
 function drawScene() {
@@ -535,7 +533,7 @@ function drawTitle() {
   ctx.shadowBlur = 24;
   ctx.fillStyle = '#eaffff';
   ctx.font = 'bold 64px monospace';
-  ctx.fillText('NINTH LIFE', W / 2, 130);
+  ctx.fillText('THE NINTH ECHO', W / 2, 130);
   ctx.restore();
   ctx.fillStyle = '#8fc3e8';
   ctx.font = '17px monospace';
@@ -683,6 +681,14 @@ function drawEnding() {
   }
 }
 
+function drawVignette() {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.85);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,10,0.55)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
 // ---------- loop ----------
 let last = performance.now(), acc = 0;
 function frame(now) {
@@ -693,6 +699,5 @@ function frame(now) {
     acc -= 1000 / 60;
   }
   draw();
-  requestAnimationFrame(frame);
-}
+  }
 requestAnimationFrame(frame);

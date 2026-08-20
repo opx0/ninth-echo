@@ -3,14 +3,14 @@
 
 let ctx = null;
 let master, sfxGain, musicGain;
-let muted = localStorage.getItem('ninthlife_mute') === '1';
+let muted = localStorage.getItem('ninthecho_mute') === '1';
 let musicTimer = null;
 
 export function isMuted() { return muted; }
 
 export function toggleMute() {
   muted = !muted;
-  localStorage.setItem('ninthlife_mute', muted ? '1' : '0');
+  localStorage.setItem('ninthecho_mute', muted ? '1' : '0');
   if (master) master.gain.value = muted ? 0 : 0.9;
   return muted;
 }
