@@ -14,9 +14,34 @@ export const ROWS = 18;
 export const LOOP_SECONDS = 15;
 export const LIVES = 9;
 
+// biome palettes — whole screen re-dresses per region
+export const MOODS = {
+  under: { // rain-blue under-halls
+    bg: ['#0b1226', '#070b16', '#04060c'], sil: ['#121d33', '#0d1626', '#0a101d'],
+    light: 0xbfdcff, ambient: 0x8ab4ff, tile: 0x1a2740, accent: 0x6ec0ff, dust: 0xbfe3ff,
+  },
+  bone: { // sepia bone-archive
+    bg: ['#2b2015', '#191209', '#0d0905'], sil: ['#3d2d1a', '#2b1f11', '#1b130a'],
+    light: 0xffdcae, ambient: 0xc9a878, tile: 0x33291c, accent: 0xd9a860, dust: 0xf2dcae,
+  },
+  root: { // teal root-depths
+    bg: ['#0c211b', '#071410', '#040a07'], sil: ['#123529', '#0d271e', '#081a13'],
+    light: 0xa8e8c8, ambient: 0x78c8a0, tile: 0x18342a, accent: 0x6ee8b0, dust: 0xc8f2dc,
+  },
+  deep: { // violet deep-loom
+    bg: ['#1c0f28', '#120819', '#08040d'], sil: ['#311a42', '#23122f', '#150b1e'],
+    light: 0xd8a8f0, ambient: 0xb080d8, tile: 0x2a1a3a, accent: 0xc880f0, dust: 0xe8c8f8,
+  },
+  heart: { // ember heart of the loom
+    bg: ['#1c1008', '#110905', '#070302'], sil: ['#301b0d', '#201108', '#130a05'],
+    light: 0xffb060, ambient: 0xa87848, tile: 0x2b1b10, accent: 0xff9840, dust: 0xffd8a0,
+  },
+};
+
 export const LEVELS = [
   {
     name: 'WAKE',
+    mood: 'under',
     story: [
       'Cold tiles. A hum in the dark.',
       'You have been here before.',
@@ -47,6 +72,7 @@ export const LEVELS = [
   },
   {
     name: 'NINE',
+    mood: 'under',
     husks: [[10, 15], [17, 15]],
     story: [
       'The Loom speaks from the walls:',
@@ -78,6 +104,7 @@ export const LEVELS = [
   },
   {
     name: 'ECHO',
+    mood: 'under',
     story: [
       'When you rewind, a life stays behind.',
       'It will repeat what you did.',
@@ -108,6 +135,7 @@ export const LEVELS = [
   },
   {
     name: 'CHAIN',
+    mood: 'bone',
     husks: [[8, 16], [18, 16]],
     story: [
       'YOUR PAST SELVES ARE LOYAL, says the Loom.',
@@ -139,6 +167,7 @@ export const LEVELS = [
   },
   {
     name: 'WEIGHT',
+    mood: 'bone',
     story: [
       'Some doors listen to weight, not wishes.',
     ],
@@ -167,6 +196,7 @@ export const LEVELS = [
   },
   {
     name: 'SACRIFICE',
+    mood: 'bone',
     husks: [[7, 12], [10, 12]],
     story: [
       'THE PIT WANTS A LIFE, purrs the Loom.',
@@ -198,6 +228,7 @@ export const LEVELS = [
   },
   {
     name: 'ASCENT',
+    mood: 'root',
     story: [
       'Higher. The hum is louder here.',
       'Something above is turning.',
@@ -227,6 +258,7 @@ export const LEVELS = [
   },
   {
     name: 'CONVOY',
+    mood: 'root',
     husks: [[7, 16], [16, 16]],
     story: [
       'You cannot carry it alone.',
@@ -258,6 +290,7 @@ export const LEVELS = [
   },
   {
     name: 'PARADOX',
+    mood: 'deep',
     husks: [[12, 16]],
     story: [
       'THREE OF YOU IN ONE ROOM, the Loom laughs.',
@@ -289,6 +322,7 @@ export const LEVELS = [
   },
   {
     name: 'THE NINTH LIFE',
+    mood: 'heart',
     husks: [[28, 16]],
     story: [
       'The heart of the Loom wears a face from the old tales:',

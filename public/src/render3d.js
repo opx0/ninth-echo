@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { TILE, COLS, ROWS } from './levels.js';
+import { TILE, COLS, ROWS, MOODS } from './levels.js';
 import { drawCat } from './actors.js';
 
 const W = 960, H = 540;
@@ -26,6 +26,8 @@ let menuLoom = null;
 const fogBanks = [];
 let beamPool = [];
 let avatar = null;
+let bgMesh = null, silMeshes = [], ambLight = null, dirLight = null;
+let curMood = MOODS.under;
 
 function silhouetteTexture(tint, alpha) {
   const c = document.createElement('canvas');
@@ -111,26 +113,29 @@ export function init(canvas) {
   camera = new THREE.PerspectiveCamera(42, W / H, 1, 2000);
   camera.position.set(0, 0, 703);
 
-  scene.add(new THREE.AmbientLight(0x8ab4ff, 0.62));
-  const dir = new THREE.DirectionalLight(0xbfdcff, 0.85);
-  dir.position.set(-200, 300, 500);
-  scene.add(dir);
+  ambLight = new THREE.AmbientLight(0x8ab4ff, 0.62);
+  scene.add(ambLight);
+  dirLight = new THREE.DirectionalLight(0xbfdcff, 0.85);
+  dirLight.position.set(-200, 300, 500);
+  scene.add(dirLight);
 
   // background gradient plane
-  const bgTex = gradientTexture();
-  const bg = new THREE.Mesh(new THREE.PlaneGeometry(2400, 1400), new THREE.MeshBasicMaterial({ map: bgTex, fog: false }));
-  bg.position.z = -260;
-  scene.add(bg);
+  bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2400, 1400), new THREE.MeshBasicMaterial({ map: gradientTexture(curMood.bg), fog: false }));
+  bgMesh.position.z = -260;
+  scene.add(bgMesh);
 
   // parallax silhouette layers — ruined arches, pillars, hanging roots
-  for (const [z, tint, alpha] of [[-230, '#121d33', 0.7], [-170, '#0d1626', 0.75], [-120, '#0a101d', 0.85]]) {
-    const tex = silhouetteTexture(tint, alpha);
+  silMeshes = [];
+  for (const [z, alpha] of [[-230, 0.7], [-170, 0.75], [-120, 0.85]]) {
     const pl = new THREE.Mesh(
       new THREE.PlaneGeometry(1900, 1069),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, fog: false, depthWrite: false }));
+      new THREE.MeshBasicMaterial({ transparent: true, fog: false, depthWrite: false }));
     pl.position.z = z;
+    pl.userData.alpha = alpha;
+    silMeshes.push(pl);
     scene.add(pl);
   }
+  applyMood('under');
   // drifting fog banks
   for (let i = 0; i < 3; i++) {
     const fogMesh = new THREE.Mesh(
@@ -212,19 +217,38 @@ export function init(canvas) {
   composer.addPass(new OutputPass());
 }
 
-function gradientTexture() {
+function gradientTexture(stops) {
   const c = document.createElement('canvas');
   c.width = 4; c.height = 256;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, '#0b1226');
-  grad.addColorStop(0.55, '#070b16');
-  grad.addColorStop(1, '#04060c');
+  grad.addColorStop(0, stops[0]);
+  grad.addColorStop(0.55, stops[1]);
+  grad.addColorStop(1, stops[2]);
   g.fillStyle = grad;
   g.fillRect(0, 0, 4, 256);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+export function applyMood(key) {
+  curMood = MOODS[key] || MOODS.under;
+  const m = curMood;
+  if (bgMesh) {
+    bgMesh.material.map?.dispose();
+    bgMesh.material.map = gradientTexture(m.bg);
+    bgMesh.material.needsUpdate = true;
+  }
+  silMeshes.forEach((pl, i) => {
+    pl.material.map?.dispose();
+    pl.material.map = silhouetteTexture(m.sil[i], pl.userData.alpha);
+    pl.material.needsUpdate = true;
+  });
+  if (ambLight) ambLight.color.setHex(m.ambient);
+  if (dirLight) dirLight.color.setHex(m.light);
+  for (const line of threads) line.material.color.setHex(m.accent);
+  if (dust) dust.material.color.setHex(m.dust);
 }
 
 function beamTexture() {
@@ -245,6 +269,7 @@ const BEAM_TEX = { t: null };
 // ---------- level construction ----------
 
 export function buildLevel(world) {
+  applyMood(world.def.mood);
   if (levelGroup) { scene.remove(levelGroup); disposeGroup(levelGroup); }
   levelGroup = new THREE.Group();
   doorMeshes = []; plateMeshes = []; plateLights = []; boxMeshes = []; exitPulse = [];
@@ -256,7 +281,7 @@ export function buildLevel(world) {
       if (world.solidGrid[r][c]) solids.push([c, r]);
 
   const tileGeo = new THREE.BoxGeometry(TILE, TILE, 46);
-  const tileMat = new THREE.MeshStandardMaterial({ color: 0x1a2740, roughness: 0.82, metalness: 0.2 });
+  const tileMat = new THREE.MeshStandardMaterial({ color: curMood.tile, roughness: 0.82, metalness: 0.2 });
   const tiles = new THREE.InstancedMesh(tileGeo, tileMat, solids.length);
   const m = new THREE.Matrix4();
   solids.forEach(([c, r], i) => {
@@ -268,7 +293,7 @@ export function buildLevel(world) {
   const tops = solids.filter(([c, r]) => r === 0 || !world.solidGrid[r - 1][c]);
   if (tops.length) {
     const topGeo = new THREE.BoxGeometry(TILE, 2.5, 48);
-    const topMat = new THREE.MeshStandardMaterial({ color: 0x223752, emissive: 0x6ec0ff, emissiveIntensity: 0.22, roughness: 0.5 });
+    const topMat = new THREE.MeshStandardMaterial({ color: curMood.tile, emissive: curMood.accent, emissiveIntensity: 0.22, roughness: 0.5 });
     const strips = new THREE.InstancedMesh(topGeo, topMat, tops.length);
     tops.forEach(([c, r], i) => {
       m.setPosition(sx(c * TILE + TILE / 2), sy(r * TILE) - 1.2, 2);
@@ -506,6 +531,7 @@ export function streaks() {
 
 export function shake(mag) { shakeMag = Math.max(shakeMag, mag); }
 export function boostBloom() { bloomBoost = 1; }
+export function pulse(k) { bloomBoost = Math.max(bloomBoost, k); }
 
 // ---------- per-frame render ----------
 

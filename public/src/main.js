@@ -1,4 +1,4 @@
-import { LEVELS, ENDINGS, LIVES, TILE } from './levels.js';
+import { LEVELS, ENDINGS, LIVES, TILE, MOODS } from './levels.js';
 import { World, LOOP_TICKS } from './world.js';
 import { Actor, drawCat, L, R, J } from './actors.js';
 import * as r3d from './render3d.js';
@@ -22,7 +22,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') sfxSafe(() => toggleMute());
 });
 addEventListener('keyup', e => held.delete(e.code));
-addEventListener('blur', () => held.clear());
+addEventListener('blur', () => { held.clear(); if (state === 'play') state = 'pause'; });
 
 function sfxSafe(f) { try { f(); } catch { /* audio may not exist yet */ } }
 
@@ -219,9 +219,12 @@ function tick() {
         unlocked = Math.max(unlocked, levelIdx + 1);
         localStorage.setItem('ninthecho_unlocked', String(unlocked));
         mapSel = Math.min(levelIdx + 1, LEVELS.length - 1);
-        state = 'map';
+        enterLevel(mapSel);   // descend straight into the next chamber
       }
     }
+  } else if (state === 'pause') {
+    if (wasPressed('Enter') || wasPressed('Space') || wasPressed('Escape') || wasPressed('KeyP')) state = 'play';
+    if (wasPressed('KeyQ')) state = 'map';
   } else if (state === 'fail') {
     failT++;
     if (failT > 130) resetRoom();
@@ -240,7 +243,7 @@ function tick() {
 const DEBUG_MODE = new URLSearchParams(location.search).has('debug');
 
 function tickPlay() {
-  if (wasPressed('Escape')) { state = 'map'; return; }
+  if (wasPressed('Escape') || wasPressed('KeyP')) { state = 'pause'; return; }
   if (DEBUG_MODE && wasPressed('KeyK')) {
     const e = world.exits[0];
     clearT = 0; clearKind = e.kind;
@@ -303,7 +306,13 @@ function tickPlay() {
     if (!p.pressed && prevPressed[i]) sfxSafe(() => sfx.plateOff());
   });
   world.doors.forEach((d, i) => {
-    if (d.open > 0.15 && !doorSfxDone[i]) { doorSfxDone[i] = true; sfxSafe(() => sfx.door()); }
+    if (d.open > 0.15 && !doorSfxDone[i]) {
+      doorSfxDone[i] = true;
+      sfxSafe(() => sfx.door());
+      r3d.burst(d.c * TILE + TILE / 2, d.r * TILE + TILE / 2, 0x9fe8ff, 16, 2.5, 40);
+      r3d.pulse(0.45);
+      r3d.shake(2);
+    }
     if (d.open < 0.1) doorSfxDone[i] = false;
   });
 
@@ -378,6 +387,19 @@ function draw() {
   else if (state === 'story') drawStory();
   else if (state === 'ending') drawEnding();
   else drawScene();
+
+  if (state === 'pause') {
+    ctx.fillStyle = 'rgba(4,7,14,0.66)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#dff2ff';
+    ctx.font = 'bold 30px monospace';
+    ctx.fillText('PAUSED', W / 2, H / 2 - 20);
+    ctx.font = '14px monospace';
+    ctx.fillStyle = 'rgba(170,210,240,0.75)';
+    ctx.fillText('ENTER resume · Q atlas · M mute', W / 2, H / 2 + 16);
+    ctx.fillText('the loop waits for no one — except now', W / 2, H / 2 + 44);
+  }
 
   drawVignette();
 }
@@ -581,66 +603,103 @@ function drawTitle() {
 
 function drawMap() {
   r3d.renderMenu(globalT);
-  ctx.fillStyle = 'rgba(4,6,12,0.62)';
+  ctx.fillStyle = 'rgba(4,6,12,0.72)';
   ctx.fillRect(0, 0, W, H);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#bfe8ff';
   ctx.font = 'bold 26px monospace';
   ctx.save();
   ctx.shadowColor = '#7fe3ff'; ctx.shadowBlur = 14;
-  ctx.fillText('THE LOOM', W / 2, 52);
+  ctx.fillText('THE LOOM — ATLAS', W / 2, 48);
   ctx.restore();
   ctx.fillStyle = 'rgba(140,180,215,0.6)';
-  ctx.font = '13px monospace';
-  ctx.fillText('descend, chamber by chamber', W / 2, 76);
+  ctx.font = '12px monospace';
+  ctx.fillText('descend, chamber by chamber', W / 2, 70);
 
-  // edges
-  ctx.strokeStyle = 'rgba(110,190,255,0.25)';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([4, 6]);
-  for (let i = 0; i < LEVELS.length - 1; i++) {
-    const [x1, y1] = LEVELS[i].mapPos, [x2, y2] = LEVELS[i + 1].mapPos;
+  // hand-laid interconnected rooms, Hollow-Knight-map style
+  const ROOMS = [
+    [140, 130, 74, 44], [244, 152, 74, 44], [348, 130, 74, 44],
+    [470, 180, 78, 46], [574, 202, 78, 46], [678, 180, 78, 46],
+    [560, 300, 76, 44], [446, 322, 76, 44],
+    [480, 400, 84, 46],
+    [468, 474, 108, 50],
+  ];
+  const LINKS = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9]];
+  const hex = n => '#' + n.toString(16).padStart(6, '0');
+
+  // corridors
+  ctx.lineWidth = 5;
+  for (const [a, b] of LINKS) {
+    const ra = ROOMS[a], rb = ROOMS[b];
+    const open = b <= unlocked;
+    ctx.strokeStyle = open ? 'rgba(150,190,230,0.35)' : 'rgba(90,110,140,0.12)';
     ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.quadraticCurveTo((x1 + x2) / 2 + 20, (y1 + y2) / 2 - 15, x2, y2);
+    ctx.moveTo(ra[0] + ra[2] / 2, ra[1] + ra[3] / 2);
+    ctx.lineTo(rb[0] + rb[2] / 2, rb[1] + rb[3] / 2);
     ctx.stroke();
   }
-  ctx.setLineDash([]);
 
   LEVELS.forEach((lv, i) => {
-    const [x, y] = lv.mapPos;
+    const [x, y, w, h] = ROOMS[i];
     const cleared = i < unlocked;
-    const isCurrent = i === unlocked;
     const locked = i > unlocked;
+    const accent = hex(MOODS[lv.mood].accent);
     ctx.save();
-    if (!locked) { ctx.shadowColor = '#7fe3ff'; ctx.shadowBlur = cleared ? 8 : 14; }
-    ctx.fillStyle = cleared ? '#7fd6f2' : locked ? '#22304a' : '#eaffff';
+    // room body
     ctx.beginPath();
-    ctx.arc(x, y, locked ? 6 : 9, 0, Math.PI * 2);
-    ctx.fill();
-    if (isCurrent) {
-      ctx.strokeStyle = `rgba(190,240,255,${0.5 + Math.sin(globalT * 0.08) * 0.4})`;
-      ctx.lineWidth = 2;
+    ctx.roundRect(x, y, w, h, 8);
+    if (cleared) {
+      ctx.fillStyle = accent + '2e';
+      ctx.fill();
+    } else if (!locked) {
+      ctx.fillStyle = accent + '18';
+      ctx.fill();
+    }
+    ctx.lineWidth = i === mapSel ? 2.5 : 1.5;
+    if (!locked) { ctx.shadowColor = accent; ctx.shadowBlur = cleared ? 6 : 10; }
+    ctx.strokeStyle = locked ? 'rgba(110,130,160,0.25)' : accent;
+    if (i === mapSel) ctx.strokeStyle = '#eaffff';
+    ctx.stroke();
+    // interior floor line
+    if (!locked) {
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = accent + '66';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(x, y, 15, 0, Math.PI * 2);
+      ctx.moveTo(x + 8, y + h - 10);
+      ctx.lineTo(x + w - 8, y + h - 10);
       ctx.stroke();
     }
     ctx.restore();
+    // boss skull pin on the finale
+    if (i === LEVELS.length - 1) {
+      const px2 = x + w / 2, py2 = y - 10;
+      ctx.save();
+      ctx.shadowColor = '#ff9840'; ctx.shadowBlur = 8;
+      ctx.fillStyle = locked ? 'rgba(160,120,90,0.5)' : '#ffcf9a';
+      ctx.beginPath();
+      ctx.arc(px2, py2, 6, 0, Math.PI * 2);
+      ctx.moveTo(px2 - 6, py2 - 2); ctx.lineTo(px2 - 7, py2 - 11); ctx.lineTo(px2 - 1, py2 - 5.5);
+      ctx.moveTo(px2 + 6, py2 - 2); ctx.lineTo(px2 + 7, py2 - 11); ctx.lineTo(px2 + 1, py2 - 5.5);
+      ctx.fill();
+      ctx.restore();
+    }
+    // labels
     if (i === mapSel) {
-      drawCat(ctx, x, y - 16, 1, globalT * 0.03, 0, { grounded: true });
-      ctx.fillStyle = '#dff6ff';
-      ctx.font = '15px monospace';
-      ctx.fillText(lv.name, x, y + 32);
+      drawCat(ctx, x + w / 2, y - 6, 1, globalT * 0.03, 0, { grounded: true });
+      ctx.fillStyle = '#eaffff';
+      ctx.font = '14px monospace';
+      ctx.fillText(lv.name, x + w / 2, y + h + 18);
     } else if (!locked) {
-      ctx.fillStyle = 'rgba(150,190,220,0.5)';
-      ctx.font = '11px monospace';
-      ctx.fillText(lv.name, x, y + 28);
+      ctx.fillStyle = 'rgba(180,205,230,0.55)';
+      ctx.font = '10px monospace';
+      ctx.fillText(lv.name, x + w / 2, y + h + 14);
     }
   });
 
   // leaderboard for the selected chamber
   if (board && boardLevel === mapSel && board.top && board.top.length) {
-    const bx = W - 185, by = 120;
+    const bx = W - 175, by = 110;
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,205,130,0.9)';
     ctx.font = '13px monospace';
@@ -657,7 +716,7 @@ function drawMap() {
 
   ctx.fillStyle = 'rgba(160,200,235,0.6)';
   ctx.font = '14px monospace';
-  ctx.fillText('←→ choose · ENTER enter chamber' + (isMuted() ? ' · M unmute' : ' · M mute'), W / 2, H - 20);
+  ctx.fillText('←→ choose · ENTER descend' + (isMuted() ? ' · M unmute' : ' · M mute'), W / 2, H - 20);
 }
 
 function typewriterLines(lines, chars, y0, lineH, font, color) {
