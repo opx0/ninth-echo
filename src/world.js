@@ -214,17 +214,37 @@ export class World {
       }
     }
 
-    // plates
+    // plates — light beam marks an unpressed plate from across the room
     for (const p of this.plates) {
       const x = p.c * TILE, y = p.r * TILE;
       const col = LETTER_COLORS[p.letter] || '#6ee7ff';
       const press = p.anim;
+      const beam = 1 - press;
+      if (beam > 0.05) {
+        const bh = 90 * beam;
+        const g = ctx.createLinearGradient(0, y + TILE - bh, 0, y + TILE);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(1, col);
+        ctx.save();
+        ctx.globalAlpha = 0.20 * beam * (0.8 + Math.sin(t * 0.05 + p.c) * 0.2);
+        ctx.fillStyle = g;
+        ctx.fillRect(x + 8, y + TILE - bh, TILE - 16, bh);
+        ctx.restore();
+      }
       ctx.save();
       ctx.shadowColor = col;
-      ctx.shadowBlur = 8 + press * 14;
+      ctx.shadowBlur = 10 + press * 16;
       ctx.fillStyle = col;
-      ctx.globalAlpha = 0.5 + press * 0.5;
-      ctx.fillRect(x + 4, y + TILE - 6 - (1 - press) * 3, TILE - 8, 4 + (1 - press) * 3);
+      ctx.globalAlpha = 0.55 + press * 0.45;
+      ctx.fillRect(x + 4, y + TILE - 7 - (1 - press) * 4, TILE - 8, 5 + (1 - press) * 4);
+      if (press > 0.5) {
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = (press - 0.5) * 1.4;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(x + TILE / 2, y + TILE - 3, 16 + press * 4, 5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.restore();
       ctx.fillStyle = '#0b1220';
       ctx.fillRect(x + 2, y + TILE - 3, TILE - 4, 3);
