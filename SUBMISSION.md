@@ -58,9 +58,12 @@ multi-ghost solutions and *proves* every room solvable.
 
 ## Accomplishments we're proud of
 
-Every level is machine-verified solvable, including both endings. The whole
-game — engine, ten rooms, story, two endings, audio — fits in a handful of
-dependency-free files that load instantly on GitHub Pages.
+Every level is machine-verified solvable, including both endings. The
+simulation core is dependency-free and byte-exact — exact enough that a
+stranger's 300-byte input recording replays perfectly on your machine, which
+is the entire world-echo feature. And the whole thing — engine, ten rooms,
+story, two endings, synthesized score, online play — was built in one
+two-day sprint.
 
 ## What we learned
 
