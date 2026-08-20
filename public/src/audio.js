@@ -102,6 +102,11 @@ export const sfx = {
       setTimeout(() => tone({ f0: f, dur: 0.3, type: 'triangle', vol: 0.2 }), i * 90));
   },
   tickWarn() { tone({ f0: 1100, f1: 1100, dur: 0.05, type: 'sine', vol: 0.1 }); },
+  beamWarn() { tone({ f0: 70, f1: 110, dur: 0.7, type: 'sine', vol: 0.22 }); },
+  beamStrike() {
+    noise({ dur: 0.35, vol: 0.3, f: 1800, f1: 400, q: 1.2 });
+    tone({ f0: 1400, f1: 300, dur: 0.3, type: 'sawtooth', vol: 0.12 });
+  },
   meow() {
     if (!ctx) return;
     const t = ctx.currentTime;

@@ -24,6 +24,8 @@ let loomGroup = null, loomRings = [], loomCore = null, loomLight = null;
 let loomState = 0, loomT = 0;   // 0 idle, 1 breaking, 2 stay
 let menuLoom = null;
 const fogBanks = [];
+let beamPool = [];
+let avatar = null;
 
 function silhouetteTexture(tint, alpha) {
   const c = document.createElement('canvas');
@@ -383,6 +385,7 @@ export function buildLevel(world) {
 
   // finale: the Loom itself hangs over the chamber
   loomGroup = null; loomRings = []; loomState = 0; loomT = 0;
+  avatar = null;
   if (world.def && world.def.finale) {
     loomGroup = new THREE.Group();
     const colors = [0x6ee7ff, 0xff7ac8, 0xffb347];
@@ -404,6 +407,33 @@ export function buildLevel(world) {
     loomGroup.add(loomLight);
     loomGroup.position.set(0, 90, -20);
     levelGroup.add(loomGroup);
+
+    // the First Cat — spectral face of the old tales, watching from above
+    const av = document.createElement('canvas');
+    av.width = 512; av.height = 512;
+    const ag = av.getContext('2d');
+    ag.translate(256, 420);
+    ag.scale(9, 9);
+    drawCat(ag, 0, 0, 1, 0.5, 0, { ghost: true, alpha: 1, grounded: true });
+    const at = new THREE.CanvasTexture(av);
+    at.colorSpace = THREE.SRGBColorSpace;
+    avatar = new THREE.Mesh(
+      new THREE.PlaneGeometry(300, 300),
+      new THREE.MeshBasicMaterial({ map: at, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }));
+    avatar.position.set(0, 110, -55);
+    levelGroup.add(avatar);
+
+    // beam column pool
+    beamPool = [];
+    for (let i = 0; i < 6; i++) {
+      const bm = new THREE.Mesh(
+        new THREE.PlaneGeometry(TILE - 6, H),
+        new THREE.MeshBasicMaterial({ color: 0xffc0a8, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+      bm.position.z = 5;
+      bm.visible = false;
+      levelGroup.add(bm);
+      beamPool.push(bm);
+    }
   }
 
   scene.add(levelGroup);
@@ -480,7 +510,7 @@ export function boostBloom() { bloomBoost = 1; }
 // ---------- per-frame render ----------
 
 // cats: [{x,y,face,phase,vy,opts,z}]
-export function render(t, world, cats, playerX, playerY) {
+export function render(t, world, cats, playerX, playerY, loopTick = -1) {
   if (!renderer) return;
   if (menuLoom) menuLoom.visible = false;
   if (levelGroup) levelGroup.visible = true;
@@ -529,6 +559,38 @@ export function render(t, world, cats, playerX, playerY) {
   for (const f of fogBanks) {
     f.position.x += f.userData.drift;
     if (f.position.x > 1100) f.position.x = -1100;
+  }
+
+  // First Cat gaze beams
+  if (beamPool.length) {
+    let bi = 0;
+    let striking = false;
+    if (loopTick >= 0 && world.def.beams) {
+      for (const ph of world.beamPhase(loopTick)) {
+        for (const c of ph.cols) {
+          const bm = beamPool[bi++];
+          if (!bm) continue;
+          bm.visible = true;
+          bm.position.x = sx(c * TILE + TILE / 2);
+          bm.position.y = 0;
+          if (ph.warn) {
+            bm.material.opacity = 0.05 + ph.k * 0.10;
+            bm.material.color.setHex(0xff9070);
+            bm.scale.x = 0.35 + ph.k * 0.3;
+          } else {
+            striking = true;
+            bm.material.opacity = 0.55 * (1 - ph.k * 0.4);
+            bm.material.color.setHex(0xfff0e0);
+            bm.scale.x = 1;
+          }
+        }
+      }
+    }
+    for (; bi < beamPool.length; bi++) beamPool[bi].visible = false;
+    if (avatar) {
+      avatar.material.opacity = (striking ? 0.8 : 0.4) + Math.sin(t * 0.03) * 0.07;
+      avatar.position.x = Math.sin(t * 0.006) * 25;
+    }
   }
 
   // the Loom turns

@@ -99,8 +99,10 @@ browser tab, full screen the game first.
    Narrate: "Deterministic replay of recorded inputs — and it's online:
    that golden cat is a real player's winning run, replaying live in my room."
    Point at the leaderboard on the map screen.
-5. **1:50–2:20 — The choice.** Chamber 10: pan between the cold exit and the
-   warm exit. Pick one, let the ending text type out.
+5. **1:50–2:20 — The boss + the choice.** Chamber 10: the First Cat's gaze
+   hammers the arena while three echoes hold the seals — show one beam death,
+   then the coordinated run to the break exit. Or walk to the warm door and
+   stay. Let the ending text type out.
 6. **2:20–2:40 — End card.** Map screen (all rooms lit), then title. Voice:
    "The Ninth Echo — playable in your browser, link below. Both endings are
    worth it."

@@ -75,7 +75,10 @@ Desktop keyboard only — no touch controls.
 ## The chambers
 
 Ten rooms, each teaching the loop a new trick: holding, chaining, weighing,
-sacrificing, ascending, marching, and one paradox. Then the choice.
+sacrificing, ascending, marching, and one paradox. Then the First Cat — a
+finale fought entirely with the loop itself: three seals held by your echoes
+while its gaze burns the floor on a pattern only repetition teaches. Or take
+the warm door, and stay.
 
 ![map](shots/map.png)
 

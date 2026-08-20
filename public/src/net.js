@@ -1,5 +1,5 @@
 // Leaderboard / world-echo client. All calls fail soft — offline play never breaks.
-export const GAME_VERSION = 2;
+export const GAME_VERSION = 3;
 
 const boardCache = new Map();
 

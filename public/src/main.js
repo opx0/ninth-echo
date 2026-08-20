@@ -262,7 +262,8 @@ function tickPlay() {
       if (!a.alive) { a.tick(0); return; }
       a.frozen = loopTick >= rec.length;
       a.tick(a.frozen ? 0 : rec[loopTick]);
-      if (!a.frozen && se.world.hitsSpike(a)) a.die();
+      if (se.world.hitsBeam(a, loopTick)) a.die();
+      if (a.alive && !a.frozen && se.world.hitsSpike(a)) a.die();
       if (a.alive) shAlive.push(a);
     });
     se.world.tickPlatesAndDoors(shAlive);
@@ -278,7 +279,11 @@ function tickPlay() {
     if (loopTick < g.len) a.frozen = false;
     else a.frozen = true;
     a.tick(a.frozen ? 0 : g.rec[loopTick]);
-    if (!a.frozen && world.hitsSpike(a)) {
+    if (world.hitsBeam(a, loopTick)) {
+      a.die();
+      r3d.burst(a.x + a.w / 2, a.y + a.h / 2, 0xffb0a0, 14, 3);
+    }
+    if (a.alive && !a.frozen && world.hitsSpike(a)) {
       a.die();
       r3d.burst(a.x + a.w / 2, a.y + a.h / 2, 0x8ce6ff, 12, 2.2);
     }
@@ -302,6 +307,14 @@ function tickPlay() {
     if (d.open < 0.1) doorSfxDone[i] = false;
   });
 
+  if (player.alive && world.hitsBeam(player, loopTick)) {
+    player.die();
+    sfxSafe(() => sfx.death());
+    hitStop = 6;
+    deathFlash = 5;
+    r3d.shake(10);
+    r3d.burst(player.x + player.w / 2, player.y + player.h / 2, 0xffb0a0, 22, 3.5);
+  }
   if (player.alive && world.hitsSpike(player)) {
     player.die();
     sfxSafe(() => sfx.death());
@@ -332,6 +345,13 @@ function tickPlay() {
     w: world.snapshot(),
   });
   loopTick++;
+
+  // First Cat gaze audio cues
+  for (const b of (world.def.beams || []))
+    for (const t0 of b.times) {
+      if (loopTick === t0) sfxSafe(() => sfx.beamWarn());
+      if (loopTick === t0 + 50) { sfxSafe(() => sfx.beamStrike()); r3d.shake(4); }
+    }
 
   // countdown warning beeps in the last 3 seconds
   const secLeft = Math.ceil((LOOP_TICKS - loopTick) / 60);
@@ -401,7 +421,7 @@ function drawScene() {
     }
   }
 
-  r3d.render(globalT, world, cats, px, py);
+  r3d.render(globalT, world, cats, px, py, state === 'rewind' ? -1 : loopTick);
 
   if (deathFlash > 0) {
     ctx.fillStyle = `rgba(255,235,235,${deathFlash * 0.09})`;

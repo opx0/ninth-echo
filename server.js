@@ -41,7 +41,7 @@ async function loadClears(level, version) {
   return mem.filter(d => d.level === level && d.v === version);
 }
 
-const GAME_VERSION = 2;           // bump when level data changes; stale ghosts are filtered out
+const GAME_VERSION = 3;           // bump when level data changes; stale ghosts are filtered out
 const NAME_RE = /^[A-Z0-9]{1,3}$/;
 
 // Submit a clear: arcade initials, lives+ticks score, and the winning loop's

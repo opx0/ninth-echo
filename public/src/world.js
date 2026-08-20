@@ -99,6 +99,29 @@ export class World {
     }
   }
 
+  // First Cat gaze beams — pure function of loopTick, so replays stay exact.
+  beamPhase(tick) {
+    const out = [];
+    for (const b of (this.def.beams || []))
+      for (const t0 of b.times) {
+        const d = tick - t0;
+        if (d >= 0 && d < 50) out.push({ cols: b.cols, warn: true, k: d / 50 });
+        else if (d >= 50 && d < 95) out.push({ cols: b.cols, warn: false, k: (d - 50) / 45 });
+      }
+    return out;
+  }
+
+  hitsBeam(a, tick) {
+    for (const ph of this.beamPhase(tick)) {
+      if (ph.warn) continue;
+      for (const c of ph.cols) {
+        const bx = c * TILE + 6;
+        if (a.x < bx + 18 && a.x + a.w > bx) return true;
+      }
+    }
+    return false;
+  }
+
   spikeRects() {
     return this.spikes.map(s => ({ x: s.c * TILE + 5, y: s.r * TILE + 14, w: 20, h: 16 }));
   }
