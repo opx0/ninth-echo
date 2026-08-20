@@ -2,11 +2,13 @@ import { LEVELS, ENDINGS, LIVES, TILE } from './levels.js';
 import { World, LOOP_TICKS } from './world.js';
 import { Actor, drawCat, L, R, J } from './actors.js';
 import * as fx from './fx.js';
+import * as r3d from './render3d.js';
 import { ensure as audioEnsure, sfx, toggleMute, isMuted } from './audio.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = 960, H = 540;
+r3d.init(document.getElementById('gl'));
 
 // ---------- input ----------
 const held = new Set();
@@ -64,6 +66,7 @@ mapSel = unlocked;
 function enterLevel(idx) {
   levelIdx = idx;
   world = new World(LEVELS[idx]);
+  r3d.buildLevel(world);
   player = new Actor(world);
   ghosts = [];
   lives = LIVES;
@@ -90,7 +93,8 @@ function startRewind() {
   rewindPos = history.length - 1;
   rewindStep = Math.max(2, Math.ceil(history.length / 40));
   sfxSafe(() => sfx.rewind());
-  fx.shake(6);
+  r3d.shake(7);
+  r3d.boostBloom();
   state = 'rewind';
 }
 
@@ -131,7 +135,6 @@ function tick() {
   } else if (state === 'play') {
     tickPlay();
   } else if (state === 'rewind') {
-    fx.rewindStreaks(W, H);
     rewindPos -= rewindStep;
     if (rewindPos <= 0) finishRewind();
   } else if (state === 'clear') {
@@ -182,14 +185,14 @@ function tickPlay() {
     a.tick(a.frozen ? 0 : g.rec[loopTick]);
     if (!a.frozen && world.hitsSpike(a)) {
       a.die();
-      fx.burst(a.x + a.w / 2, a.y + a.h / 2, 'rgba(140,230,255,0.8)', 10, 2);
+      r3d.burst(a.x + a.w / 2, a.y + a.h / 2, 0x8ce6ff, 12, 2.2);
     }
     if (a.alive) alive.push(a);
   });
 
   const ev = player.tick(player.alive ? mask : 0);
   if (ev.jumped) sfxSafe(() => sfx.jump());
-  if (ev.landed) { sfxSafe(() => sfx.land()); fx.landPuff(player.x + player.w / 2, player.y + player.h); }
+  if (ev.landed) { sfxSafe(() => sfx.land()); r3d.burst(player.x + player.w / 2, player.y + player.h, 0x9fc4ff, 6, 1.1, 16); }
   if (ev.step) sfxSafe(() => sfx.step());
   if (player.alive) alive.push(player);
 
@@ -207,8 +210,8 @@ function tickPlay() {
   if (player.alive && world.hitsSpike(player)) {
     player.die();
     sfxSafe(() => sfx.death());
-    fx.shake(8);
-    fx.burst(player.x + player.w / 2, player.y + player.h / 2, '#ff8f8f', 18, 3.5);
+    r3d.shake(10);
+    r3d.burst(player.x + player.w / 2, player.y + player.h / 2, 0xff8f8f, 22, 3.5);
   }
 
   if (player.alive) {
@@ -216,7 +219,7 @@ function tickPlay() {
     if (e) {
       clearT = 0;
       clearKind = e.kind;
-      fx.burst(e.c * TILE + TILE / 2, e.r * TILE + TILE / 2, e.kind === 'stay' ? '#ffcf8a' : '#eaffff', 30, 4, 50, 0.02);
+      r3d.burst(e.c * TILE + TILE / 2, e.r * TILE + TILE / 2, e.kind === 'stay' ? 0xffcf8a : 0xeaffff, 34, 4, 55);
       state = 'clear';
       return;
     }
@@ -238,7 +241,7 @@ function tickPlay() {
   if (wasPressed('KeyR')) {
     if (lives > 1) { startRewind(); return; }
     noLivesFlash = 60;
-    fx.shake(3);
+    r3d.shake(3);
   }
   if (noLivesFlash > 0) noLivesFlash--;
 
@@ -259,37 +262,45 @@ function draw() {
 }
 
 function drawScene() {
-  fx.drawBackground(ctx, W, H, globalT, levelIdx);
-  ctx.save();
-  const [ox, oy] = fx.shakeOffset();
-  ctx.translate(ox, oy);
+  let cats = [];
+  let px = player.x + 11, py = player.y + 26;
 
   if (state === 'rewind' && history.length) {
     const f = history[Math.max(0, Math.min(history.length - 1, Math.round(rewindPos)))];
     world.applySnapshot(f.w);
-    world.draw(ctx, globalT);
     f.g.forEach(g => {
-      if (g[4]) drawCat(ctx, g[0] + 11, g[1] + 26, g[2], g[3], 0, { ghost: true, frozen: g[5], alpha: 0.5, grounded: true });
+      if (g[4]) cats.push({ x: g[0] + 11, y: g[1] + 26, face: g[2], phase: g[3], vy: 0, opts: { ghost: true, frozen: g[5], alpha: 0.55, grounded: true } });
     });
-    if (f.p[4]) drawCat(ctx, f.p[0] + 11, f.p[1] + 26, f.p[2], f.p[3], 0, { alpha: 0.9, grounded: true });
-    fx.drawParticles(ctx);
-    ctx.restore();
-    // rewind overlay
-    ctx.fillStyle = `rgba(140,230,255,${0.08 + Math.random() * 0.05})`;
-    ctx.fillRect(0, 0, W, H);
+    if (f.p[4]) {
+      cats.push({ x: f.p[0] + 11, y: f.p[1] + 26, face: f.p[2], phase: f.p[3], vy: 0, opts: { grounded: true, alpha: 1 } });
+      px = f.p[0] + 11; py = f.p[1] + 26;
+    }
+    r3d.streaks();
+  } else {
+    ghostActors.forEach(a => {
+      if (!a.alive && a.deathT > 40) return;
+      cats.push({
+        x: a.x + a.w / 2, y: a.y + a.h, face: a.face, phase: a.phase, vy: a.vy,
+        opts: { ghost: true, frozen: a.frozen, dead: !a.alive, deathT: a.deathT, squash: a.squash, grounded: a.grounded, running: a.grounded && Math.abs(a.vx) > 0.3, alpha: a.frozen ? 0.62 : 0.5 },
+      });
+    });
+    if (player.alive || player.deathT <= 40) {
+      cats.push({
+        x: player.x + player.w / 2, y: player.y + player.h, face: player.face, phase: player.phase, vy: player.vy,
+        opts: { dead: !player.alive, deathT: player.deathT, squash: player.squash, grounded: player.grounded, running: player.grounded && Math.abs(player.vx) > 0.3, alpha: 1 },
+      });
+    }
+  }
+
+  r3d.render(globalT, world, cats, px, py);
+
+  // 2D overlay (canvas already cleared transparent in draw())
+  if (state === 'rewind') {
     ctx.fillStyle = 'rgba(160,240,255,0.9)';
     ctx.font = '28px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('⟲  a life stays behind', W / 2, H / 2 - 100);
-    drawHud();
-    return;
+    ctx.fillText('\u27f2  a life stays behind', W / 2, H / 2 - 100);
   }
-
-  world.draw(ctx, globalT);
-  ghostActors.forEach(a => a.draw(ctx, a.frozen ? 0.55 : 0.45));
-  player.draw(ctx);
-  fx.drawParticles(ctx);
-  ctx.restore();
 
   drawHud();
 
