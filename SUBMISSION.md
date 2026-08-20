@@ -42,9 +42,9 @@ desync a replay. The rewind cutscene plays your actual recorded history
 backwards. All sound — the drone score, the tape-rewind sweep, the meow — is
 synthesized with WebAudio at runtime; there is not a single asset file. The
 cat is drawn procedurally onto a canvas texture billboarded into the scene.
-Online: Node/Express on **Google Cloud Run** with **Firestore**, serving the
-game at **game.opxz.dev** and powering world echoes + leaderboards, with an
-in-memory fallback so the demo can never die mid-judging.
+Online: Node/Express behind **Caddy** on our own **Google Cloud VM**, serving
+the game and the echo/leaderboard API at **game.opxz.dev** — systemd-managed,
+JSON-file persistence, so the demo can't die mid-judging.
 
 ## Challenges we ran into
 

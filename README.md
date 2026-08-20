@@ -62,9 +62,9 @@ Desktop keyboard only — no touch controls.
   tape-rewind sweep, the meow. Zero asset files.
 - **The cat is code**: bezier tail, squash & stretch, blinking — drawn to a
   canvas texture billboarded into the WebGL scene.
-- **Server**: Node/Express on Google Cloud Run with Firestore for clears and
-  echoes, in-memory fallback if Firestore blinks, static files from the same
-  service at `game.opxz.dev`.
+- **Server**: Node/Express behind Caddy (auto-HTTPS) on our own Google Cloud
+  VM, serving the game and the echo/leaderboard API at `game.opxz.dev`, with
+  JSON-file persistence and an optional Firestore mirror.
 - Every level is **machine-proven solvable**: a scripted bot drives the real
   physics through the full multi-ghost solutions (see commit history).
 - Type-checked without a build step: `tsc --checkJs` over the plain JS

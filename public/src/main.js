@@ -98,7 +98,7 @@ function enterLevel(idx) {
   submitted = false;
   nameChars = '';
   worldEchoes = [];
-  fetchBoard(idx).then(b => {
+  fetchBoard(idx, true).then(b => {
     if (!b || levelIdx !== idx) return;
     worldEchoes = b.echoes.slice(0, 2).map(e => makeShadow(e, idx));
     resetShadows();
@@ -205,6 +205,7 @@ function tick() {
         ticks: Math.max(30, totalTicks),
         ghosts: runs.slice(-9),
       });
+      boardLevel = -1;   // force the map panel to refetch with this clear included
     }
     clearT++;
     if (clearT > 140) {

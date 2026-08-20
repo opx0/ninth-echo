@@ -1,6 +1,8 @@
 // Leaderboard / world-echo client. All calls fail soft — offline play never breaks.
 export const GAME_VERSION = 2;
 
+const boardCache = new Map();
+
 export function encodeRec(u8) {
   let s = '';
   for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
@@ -17,6 +19,7 @@ export function decodeRec(b64) {
 }
 
 export function submitClear({ level, name, lives, ticks, ghosts }) {
+  boardCache.delete(level);
   try {
     fetch('/api/clear', {
       method: 'POST',
@@ -26,7 +29,6 @@ export function submitClear({ level, name, lives, ticks, ghosts }) {
   } catch { /* offline */ }
 }
 
-const boardCache = new Map();
 export async function fetchBoard(level, fresh = false) {
   if (!fresh && boardCache.has(level)) return boardCache.get(level);
   try {

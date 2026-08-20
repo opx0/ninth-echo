@@ -1,6 +1,7 @@
 // THE NINTH ECHO server: static hosting + echo/leaderboard API on Firestore.
 import express from 'express';
 import { Firestore } from '@google-cloud/firestore';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,11 +11,23 @@ app.use(express.json({ limit: '256kb' }));
 
 let clears = null;
 try { clears = new Firestore().collection('clears'); } catch (e) { console.error('firestore init failed', e.message); }
-// In-memory fallback keeps the API alive even if Firestore misbehaves mid-demo.
-const mem = [];
+// In-memory store with JSON snapshot on disk — primary persistence on a plain
+// VM; Firestore (if creds exist) is a bonus mirror.
+const DATA_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'clears.json');
+let mem = [];
+try { mem = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch { /* first boot */ }
+let saveTimer = null;
+function scheduleSave() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    fs.writeFile(DATA_FILE, JSON.stringify(mem), e => { if (e) console.error('save', e.message); });
+  }, 2000);
+}
 async function saveClear(doc) {
   mem.push(doc);
   if (mem.length > 2000) mem.shift();
+  scheduleSave();
   if (clears) { try { await clears.add(doc); } catch (e) { console.error('fs add, disabling firestore:', e.message); clears = null; } }
 }
 async function loadClears(level, version) {
