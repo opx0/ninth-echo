@@ -66,7 +66,9 @@ let epiText = '', epiAlpha = 0;         // husk epitaph, faded by proximity
 let shardText = '', shardT = 0;
 let vigilT = 0, vigilChars = 0, vigilSeen = false;
 
-let unlocked = Math.min(parseInt(localStorage.getItem('ninthecho_unlocked') || '0', 10), LEVELS.length - 1);
+// storage keys carry the game version — old saves hold indices of a level list
+// that has since changed shape, so they are ignored rather than misread
+let unlocked = Math.min(parseInt(localStorage.getItem('ninthecho_unlocked4') || '0', 10), LEVELS.length - 1);
 mapSel = unlocked;
 
 let totalTicks = 0;
@@ -74,8 +76,9 @@ let playerName = localStorage.getItem('ninthecho_name') || '';
 let nameChars = '';
 let submitted = false;
 let board = null, boardLevel = -1;
-let claw = parseInt(localStorage.getItem('ninthecho_claw') || '0', 10);  // bitmask by level idx
-const clawCount = () => [0, 1, 8].filter(i => claw & (1 << i)).length;
+let claw = parseInt(localStorage.getItem('ninthecho_claw4') || '0', 10);  // bitmask by level idx
+const RELIC_LEVELS = LEVELS.flatMap((lv, i) => lv.relic ? [i] : []);
+const clawCount = () => RELIC_LEVELS.filter(i => claw & (1 << i)).length;
 let worldEchoes = [];   // [{name, world, recs, actors}]
 
 function loadBoardFor(level) {
@@ -248,7 +251,7 @@ function tick() {
     clearT++;
     if (clearT > 140) {
       if (LEVELS[levelIdx].finale) {
-        endingKind = clearKind === 'stay' ? 'stay' : clawCount() === 3 ? 'sever' : 'break';
+        endingKind = clearKind === 'stay' ? 'stay' : clawCount() === RELIC_LEVELS.length ? 'sever' : 'break';
         endLines = ENDINGS[endingKind].map(l => l
           .replace(/\{spent\} lives/g, livesSpent === 1 ? '1 life' : `${livesSpent} lives`)
           .replace(/\{spent\}/g, String(livesSpent)));
@@ -256,7 +259,7 @@ function tick() {
         state = 'ending';
       } else {
         unlocked = Math.max(unlocked, levelIdx + 1);
-        localStorage.setItem('ninthecho_unlocked', String(unlocked));
+        localStorage.setItem('ninthecho_unlocked4', String(unlocked));
         mapSel = Math.min(levelIdx + 1, LEVELS.length - 1);
         enterLevel(mapSel);   // descend straight into the next chamber
       }
@@ -384,7 +387,7 @@ function tickPlay() {
       shardText = LEVELS[levelIdx].shard || '';
       shardT = SHARD_TICKS;
       claw |= 1 << levelIdx;
-      localStorage.setItem('ninthecho_claw', String(claw));
+      localStorage.setItem('ninthecho_claw4', String(claw));
       r3d.collectRelic();
       r3d.burst(rx + TILE / 2, ry + TILE / 2, 0xffd8a0, 26, 3.5, 50);
       r3d.pulse(0.6);
@@ -400,7 +403,7 @@ function tickPlay() {
       r3d.burst(e.c * TILE + TILE / 2, e.r * TILE + TILE / 2, e.kind === 'stay' ? 0xffcf8a : 0xeaffff, 34, 4, 55);
       sfxSafe(() => sfx.win());
       if (LEVELS[levelIdx].finale) {
-        if (e.kind === 'stay') r3d.loomStay(); else { r3d.loomBreak(); sfxSafe(() => sfx.death()); if (clawCount() === 3) r3d.shake(16); }
+        if (e.kind === 'stay') r3d.loomStay(); else { r3d.loomBreak(); sfxSafe(() => sfx.death()); if (clawCount() === RELIC_LEVELS.length) r3d.shake(16); }
       }
       state = 'clear';
       return;
@@ -668,7 +671,7 @@ function drawHud() {
   if (clawCount() > 0) {
     ctx.save();
     ctx.textAlign = 'right';
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < RELIC_LEVELS.length; i++) {
       const cx2 = W - 30 - i * 16, cy2 = 62;
       const have = i < clawCount();
       ctx.strokeStyle = have ? '#ffd8a0' : 'rgba(140,120,90,0.35)';
@@ -767,15 +770,6 @@ function roomPath(x, y, w, h, seed) {
   ctx.closePath();
 }
 
-const ATLAS_ROOMS = [
-  [95, 100, 80, 46], [205, 140, 80, 46], [318, 100, 80, 46],
-  [448, 138, 82, 48], [565, 178, 82, 48], [682, 140, 86, 48],
-  [600, 268, 82, 48], [468, 296, 82, 48],
-  [392, 372, 90, 50],
-  [508, 420, 118, 58],
-];
-const ATLAS_LINKS = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9]];
-
 function drawMap() {
   // ink-dark parchment ground
   ctx.fillStyle = '#0a0d16';
@@ -812,14 +806,14 @@ function drawMap() {
 
   const hex = n => '#' + n.toString(16).padStart(6, '0');
 
-  // corridors: narrow inked channels
-  for (const [a, b] of ATLAS_LINKS) {
-    const ra = ATLAS_ROOMS[a], rb = ATLAS_ROOMS[b];
+  // corridors: narrow inked channels, chamber to chamber down the list
+  for (let i = 1; i < LEVELS.length; i++) {
+    const ra = LEVELS[i - 1].atlas, rb = LEVELS[i].atlas;
     const ax = ra[0] + ra[2] / 2, ay = ra[1] + ra[3] / 2;
     const bx2 = rb[0] + rb[2] / 2, by2 = rb[1] + rb[3] / 2;
     const dx = bx2 - ax, dy = by2 - ay, len = Math.hypot(dx, dy);
     const px2 = -dy / len * 3.5, py2 = dx / len * 3.5;
-    const open = b <= unlocked;
+    const open = i <= unlocked;
     ctx.strokeStyle = open ? 'rgba(150,170,200,0.4)' : 'rgba(110,125,150,0.14)';
     ctx.lineWidth = 1.2;
     ctx.setLineDash(open ? [] : [3, 5]);
@@ -833,7 +827,7 @@ function drawMap() {
   }
 
   LEVELS.forEach((lv, i) => {
-    const [x, y, w, h] = ATLAS_ROOMS[i];
+    const [x, y, w, h] = lv.atlas;
     const cleared = i < unlocked;
     const locked = i > unlocked;
     const accent = MOODS[lv.mood].accent;
@@ -902,7 +896,7 @@ function drawMap() {
       ctx.restore();
     }
     // boss sigil on the finale
-    if (i === LEVELS.length - 1) {
+    if (lv.finale) {
       const px3 = x + w / 2, py3 = y - 12;
       ctx.save();
       ctx.strokeStyle = locked ? 'rgba(190,140,95,0.45)' : '#ffcf9a';

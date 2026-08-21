@@ -13,6 +13,9 @@ export const COLS = 32;
 export const ROWS = 18;
 export const LOOP_SECONDS = 15;
 export const LIVES = 9;
+// bump when level data changes; stale ghosts are filtered out. Shared by the
+// client (net.js) and the server, which imports this module directly.
+export const GAME_VERSION = 4;
 
 // biome palettes — whole screen re-dresses per region
 export const MOODS = {
@@ -38,7 +41,9 @@ export const MOODS = {
   },
 };
 
-// Narrative fields: canto / title / region label each chapter. In `story`,
+// `atlas` is the chamber's [x, y, w, h] room rect on the map; the atlas links
+// them in list order. Narrative fields: canto / title / region label each
+// chapter. In `story`,
 // husk epitaphs and shard lines, a line that is entirely UPPERCASE renders
 // gold as the Loom's voice; anything else is the narrator (the First Cat).
 export const LEVELS = [
@@ -57,7 +62,7 @@ export const LEVELS = [
       'Below you, something was already turning.',
     ],
     hint: '← → move · ↑ jump',
-    mapPos: [140, 120],
+    atlas: [95, 100, 80, 46],
     grid: [
       '################################',
       '#..............................#',
@@ -84,12 +89,12 @@ export const LEVELS = [
     canto: 'CANTO II',
     title: 'How to Count to Nine',
     region: 'the rain-blue under-halls',
-    relic: [16, 12],
+    relic: [29, 7],
     shard: 'It gave all nine away and kept none for itself.',
     mood: 'under',
     husks: [
-      [10, 15, 'SORREL. Nine lives, and none of them slow.'],
-      [17, 15, 'WICK. Spent seven learning where the spikes were.'],
+      [16, 4, 'SORREL. Nine lives, and none of them slow.'],
+      [24, 7, 'WICK. Spent seven learning where the spikes were.'],
     ],
     story: [
       'The First Cat taught kittens to count to nine,',
@@ -97,26 +102,29 @@ export const LEVELS = [
       'LITTLE GHOST. I HAVE ARRANGED TO COLLECT THE REST.',
       'The floor below had been counting a long time.',
     ],
-    hint: 'Spikes spend a life. You have nine.',
-    mapPos: [260, 95],
+    hint: 'Drop from ledge to ledge. Spikes spend a life, and you have nine.',
+    atlas: [205, 140, 80, 46],
+    // a descent: four shelves stepping down left-right-left, each with a spiked
+    // gap. The pocket behind the spikes on the right shelf is a dead end that
+    // holds the claw shard.
     grid: [
       '################################',
+      '#.S............................#',
+      '#######........................#',
+      '#..............................#',
+      '#..............................#',
+      '#......####^^#######...........#',
+      '#..............................#',
+      '#..............................#',
+      '#...................######^^####',
+      '#..............................#',
+      '#..............................#',
+      '#...........#######............#',
       '#..............................#',
       '#..............................#',
       '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#..............................#',
-      '#.S.........................E..#',
-      '#####^^^####^^^####^^^##########',
+      '#..........................E...#',
+      '############^^########^^########',
       '################################',
     ],
   },
@@ -132,8 +140,10 @@ export const LEVELS = [
       'It repeats what you did, exactly, for as long as it has.',
       'It cannot do otherwise. Neither, yet, could you.',
     ],
-    hint: 'Stand on the plate. Press R. Your echo will hold it.',
-    mapPos: [380, 135],
+    hint: 'Climb to the plate, then press R. Your echo holds it while you take the low road.',
+    atlas: [318, 100, 80, 46],
+    // the plate sits three ledges up the left wall; the door it opens is on the
+    // floor the climb leaves behind, and the exit is two ledges up beyond it.
     grid: [
       '################################',
       '#...................#..........#',
@@ -145,13 +155,13 @@ export const LEVELS = [
       '#...................#..........#',
       '#...................#..........#',
       '#...................#..........#',
-      '#...................#..........#',
-      '#...................#..........#',
-      '#...................#..........#',
-      '#...................#..........#',
+      '#..............a....#..........#',
+      '#.............###...#..........#',
+      '#...................#........E.#',
+      '#........###........#.......####',
       '#...................A..........#',
-      '#...................A..........#',
-      '#.S..a..............A......E...#',
+      '#...###.............A...###....#',
+      '#.S.................A..........#',
       '################################',
     ],
   },
@@ -162,8 +172,8 @@ export const LEVELS = [
     region: 'the bone archive',
     mood: 'bone',
     husks: [
-      [8, 16, 'PIP. Held a door for a sister who never came.'],
-      [18, 16, 'TALLOW. Counted to eight, then forgot the last one.'],
+      [10, 16, 'PIP. Held a door for a sister who never came.'],
+      [21, 11, 'TALLOW. Counted to eight, then forgot the last one.'],
     ],
     story: [
       'These walls were a ledger. A record of what was taken.',
@@ -171,26 +181,29 @@ export const LEVELS = [
       'THE LEAST YOU CAN DO IS USE THEM.',
       'They had names once. The ledger keeps those too.',
     ],
-    hint: 'Two doors. Two echoes. Chain them.',
-    mapPos: [500, 105],
+    hint: 'Two doors — one down here, one up there. Chain an echo to each.',
+    atlas: [448, 138, 82, 48],
+    // Two stacked halls. Plate a and door A are on the entry plinth below; the
+    // gallery at row 12 is both that hall's ceiling and the upper floor, reached
+    // only by the chimney in the gap at cols 14-17. Plate b and door B are up there.
     grid: [
       '################################',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........#.........#........#',
-      '#...........A.........B........#',
-      '#...........A.........B........#',
-      '#.S.a.......A...b.....B....E...#',
+      '#......................#.......#',
+      '#......................#.......#',
+      '#......................#.......#',
+      '#......................#.......#',
+      '#......................#.......#',
+      '#......................#.......#',
+      '#......................#.......#',
+      '#......................#.......#',
+      '#......................B.......#',
+      '#......................B.......#',
+      '#..................b...B...E...#',
+      '##############....##############',
+      '#.......A......##..............#',
+      '#.S..a..A......................#',
+      '########A....##................#',
+      '#########....##................#',
       '################################',
     ],
   },
@@ -207,7 +220,7 @@ export const LEVELS = [
       'Then the door above rusted shut, and no one came back.',
     ],
     hint: 'Boxes press plates. Boxes make stairs.',
-    mapPos: [620, 150],
+    atlas: [565, 178, 82, 48],
     grid: [
       '################################',
       '#...................#..........#',
@@ -248,7 +261,7 @@ export const LEVELS = [
     hint: 'The plate is down there. A life must stay behind. Aim true.',
     warden: true,
     beams: [{ cols: [17, 18], times: [200, 500, 800] }],
-    mapPos: [700, 240],
+    atlas: [682, 140, 86, 48],
     grid: [
       '################################',
       '#.....................#........#',
@@ -283,7 +296,7 @@ export const LEVELS = [
       'It was a long time ago. It was still up there.',
     ],
     hint: 'Send an echo to the plate below. Then climb.',
-    mapPos: [600, 315],
+    atlas: [600, 268, 82, 48],
     grid: [
       '################################',
       '#..............................#',
@@ -312,8 +325,8 @@ export const LEVELS = [
     region: 'the root-depths',
     mood: 'root',
     husks: [
-      [7, 16, 'ASH. Walked her own dead through three doors.'],
-      [16, 16, 'BRAMBLE. Gave eight away and was glad of it.'],
+      [9, 16, 'ASH. Walked her own dead through three doors.'],
+      [16, 10, 'BRAMBLE. Gave eight away and was glad of it.'],
     ],
     story: [
       'You marched your dead through three doors, in order.',
@@ -321,26 +334,30 @@ export const LEVELS = [
       'Nim, who went last, and did not want to go.',
       'You did not use them. You mourned them, and walked on.',
     ],
-    hint: 'Three doors. Three echoes. March them through in order.',
-    mapPos: [470, 345],
+    hint: 'Three doors up the switchback. March three echoes through in order.',
+    atlas: [468, 296, 82, 48],
+    // A switchback: door A gates the bottom leg (left to right), the stair at
+    // cols 22-30 lifts you onto the middle shelf, door B gates that leg back
+    // right to left, the blocks at cols 1-5 lift you again, and door C gates the
+    // short top leg to the exit. Each shelf is the ceiling of the hall below it.
     grid: [
       '################################',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........#.......#.......#....#',
-      '#.........A.......B.......C....#',
-      '#.........A.......B.......C....#',
-      '#.S..a....A...b...B...c...C..E.#',
+      '#..........#...................#',
+      '#..........C...................#',
+      '#..........C...................#',
+      '#........c.C.....E.............#',
+      '#......#############...........#',
+      '#............#.................#',
+      '#...##.......#.................#',
+      '#............B.................#',
+      '###..........B.................#',
+      '###..........B....b............#',
+      '######################.........#',
+      '#...........#..................#',
+      '#...........#.........###......#',
+      '#...........A..................#',
+      '#...........A.............######',
+      '#.S..a......A.............######',
       '################################',
     ],
   },
@@ -364,7 +381,7 @@ export const LEVELS = [
     hint: 'One holds the door. One builds the path. Stay out of their way.',
     warden: true,
     beams: [{ cols: [11, 12], times: [150, 450, 750] }],
-    mapPos: [340, 380],
+    atlas: [392, 372, 90, 50],
     grid: [
       '################################',
       '#..............................#',
@@ -402,13 +419,16 @@ export const LEVELS = [
       'or take the warm door, lie down, and stay.',
     ],
     hint: 'Three seals, held together, open the way. Its gaze burns the floor.',
-    mapPos: [480, 460],
+    atlas: [508, 420, 118, 58],
     finale: true,
-    // the First Cat's gaze: deterministic beam strikes (warn 50 ticks, lethal 50..95)
+    // the First Cat's gaze: deterministic beam strikes (warn 50 ticks, lethal 50..95).
+    // Two of the three seals stand under it — cols 13 and 17 — so an echo left on
+    // them burns; col 15 is the one safe stone between the bands, and the last
+    // band is the approach to the door. Three sweeps, left to right, 80 apart.
     beams: [
-      { cols: [7, 8], times: [140, 420, 700] },
-      { cols: [14, 15], times: [250, 530, 810] },
-      { cols: [19, 20], times: [330, 610] },
+      { cols: [12, 13], times: [70, 350, 690] },
+      { cols: [17, 18], times: [150, 430, 720] },
+      { cols: [19, 20], times: [230, 500, 790] },
     ],
     grid: [
       '################################',
