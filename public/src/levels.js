@@ -15,7 +15,7 @@ export const LOOP_SECONDS = 15;
 export const LIVES = 9;
 // bump when level data changes; stale ghosts are filtered out. Shared by the
 // client (net.js) and the server, which imports this module directly.
-export const GAME_VERSION = 4;
+export const GAME_VERSION = 5;
 
 // biome palettes — whole screen re-dresses per region
 export const MOODS = {
@@ -46,6 +46,10 @@ export const MOODS = {
 // chapter. In `story`,
 // husk epitaphs and shard lines, a line that is entirely UPPERCASE renders
 // gold as the Loom's voice; anything else is the narrator (the First Cat).
+//
+// `interlude: true` marks a passage rather than a chamber: a traversal-only
+// shaft at a biome boundary, with no canto, no chamber number, no leaderboard
+// and a quiet HUD. Its atlas rect is tall and thin and draws as a throat.
 export const LEVELS = [
   {
     name: 'WAKE',
@@ -62,7 +66,7 @@ export const LEVELS = [
       'Below you, something was already turning.',
     ],
     hint: '← → move · ↑ jump',
-    atlas: [95, 100, 80, 46],
+    atlas: [58, 92, 76, 40],
     grid: [
       '################################',
       '#..............................#',
@@ -103,7 +107,7 @@ export const LEVELS = [
       'The floor below had been counting a long time.',
     ],
     hint: 'Drop from ledge to ledge. Spikes spend a life, and you have nine.',
-    atlas: [205, 140, 80, 46],
+    atlas: [164, 122, 76, 40],
     // a descent: four shelves stepping down left-right-left, each with a spiked
     // gap. The pocket behind the spikes on the right shelf is a dead end that
     // holds the claw shard.
@@ -141,7 +145,7 @@ export const LEVELS = [
       'It cannot do otherwise. Neither, yet, could you.',
     ],
     hint: 'Climb to the plate, then press R. Your echo holds it while you take the low road.',
-    atlas: [318, 100, 80, 46],
+    atlas: [270, 96, 76, 40],
     // the plate sits three ledges up the left wall; the door it opens is on the
     // floor the climb leaves behind, and the exit is two ledges up beyond it.
     grid: [
@@ -166,6 +170,44 @@ export const LEVELS = [
     ],
   },
   {
+    name: 'THE DROP',
+    title: 'A Way Down',
+    region: 'the way into the bone archive',
+    mood: 'bone',
+    interlude: true,
+    husks: [
+      [13, 5, 'FERN. Went down easy, and never once looked up.'],
+    ],
+    story: [
+      'There is no puzzle in a fall. Only the falling.',
+      'Let yourself down, little one. I will keep telling it.',
+    ],
+    hint: 'nothing here but the way down',
+    atlas: [368, 106, 18, 108],
+    // three shelves stepping down and to the side, then a five-wide throat that
+    // spits you out into a low sepia hall.
+    grid: [
+      '################################',
+      '#....S.........................#',
+      '#########......................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#......#############...........#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#...................############',
+      '###############.....############',
+      '###############.....############',
+      '###############.....############',
+      '###############.....############',
+      '#..............................#',
+      '#.........E....................#',
+      '################################',
+    ],
+  },
+  {
     name: 'CHAIN',
     canto: 'CANTO IV',
     title: 'The Ledger of Bone',
@@ -182,7 +224,7 @@ export const LEVELS = [
       'They had names once. The ledger keeps those too.',
     ],
     hint: 'Two doors — one down here, one up there. Chain an echo to each.',
-    atlas: [448, 138, 82, 48],
+    atlas: [424, 200, 78, 42],
     // Two stacked halls. Plate a and door A are on the entry plinth below; the
     // gallery at row 12 is both that hall's ceiling and the upper floor, reached
     // only by the chimney in the gap at cols 14-17. Plate b and door B are up there.
@@ -220,7 +262,7 @@ export const LEVELS = [
       'Then the door above rusted shut, and no one came back.',
     ],
     hint: 'Boxes press plates. Boxes make stairs.',
-    atlas: [565, 178, 82, 48],
+    atlas: [532, 232, 78, 42],
     grid: [
       '################################',
       '#...................#..........#',
@@ -261,7 +303,7 @@ export const LEVELS = [
     hint: 'The plate is down there. A life must stay behind. Aim true.',
     warden: true,
     beams: [{ cols: [17, 18], times: [200, 500, 800] }],
-    atlas: [682, 140, 86, 48],
+    atlas: [640, 198, 80, 44],
     grid: [
       '################################',
       '#.....................#........#',
@@ -284,6 +326,44 @@ export const LEVELS = [
     ],
   },
   {
+    name: 'THE SEAM',
+    title: 'Where the Stone Splits',
+    region: 'the way into the root-depths',
+    mood: 'root',
+    interlude: true,
+    husks: [
+      [10, 7, 'MOSS. Slept through eight of them in the same crack.'],
+    ],
+    story: [
+      'The bone gave out here, and something green came through.',
+      'Nothing wants you yet. Take the long step down.',
+    ],
+    hint: 'the stone smells of water now',
+    atlas: [712, 266, 18, 112],
+    // the archive cracks open: shelves stepping down to the left, a narrow split
+    // in the rock, then a wide low room breathing teal.
+    grid: [
+      '################################',
+      '#.........................S....#',
+      '#.....................##########',
+      '#..............................#',
+      '#..............................#',
+      '#.............#########........#',
+      '#..............................#',
+      '#..............................#',
+      '#......########................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '###.....########################',
+      '###.....########################',
+      '###.....########################',
+      '###.....########################',
+      '#..........E...................#',
+      '################################',
+    ],
+  },
+  {
     name: 'ASCENT',
     canto: 'CANTO VII',
     title: 'Toward the Hum',
@@ -296,7 +376,7 @@ export const LEVELS = [
       'It was a long time ago. It was still up there.',
     ],
     hint: 'Send an echo to the plate below. Then climb.',
-    atlas: [600, 268, 82, 48],
+    atlas: [592, 330, 78, 42],
     grid: [
       '################################',
       '#..............................#',
@@ -335,7 +415,7 @@ export const LEVELS = [
       'You did not use them. You mourned them, and walked on.',
     ],
     hint: 'Three doors up the switchback. March three echoes through in order.',
-    atlas: [468, 296, 82, 48],
+    atlas: [478, 360, 78, 42],
     // A switchback: door A gates the bottom leg (left to right), the stair at
     // cols 22-30 lifts you onto the middle shelf, door B gates that leg back
     // right to left, the blocks at cols 1-5 lift you again, and door C gates the
@@ -381,7 +461,7 @@ export const LEVELS = [
     hint: 'One holds the door. One builds the path. Stay out of their way.',
     warden: true,
     beams: [{ cols: [11, 12], times: [150, 450, 750] }],
-    atlas: [392, 372, 90, 50],
+    atlas: [360, 332, 84, 46],
     grid: [
       '################################',
       '#..............................#',
@@ -404,6 +484,44 @@ export const LEVELS = [
     ],
   },
   {
+    name: 'THE VEIN',
+    title: 'The Warm Dark',
+    region: 'the way into the ember heart',
+    mood: 'heart',
+    interlude: true,
+    husks: [
+      [14, 11, 'CINDER. Warmed her last life and called it enough.'],
+    ],
+    story: [
+      'It is warm from here down. That is not kindness.',
+      'Nine tellings I have brought a cat this far. Go slowly.',
+    ],
+    hint: 'the hum is under your paws',
+    atlas: [312, 350, 18, 104],
+    // one long plunge past ledges you never touch, onto a shelf of rock, then a
+    // second drop through the vein into the ember hall.
+    grid: [
+      '################################',
+      '#..S...........................#',
+      '#######........................#',
+      '#..............................#',
+      '#.........................######',
+      '#..............................#',
+      '#####..........................#',
+      '#..............................#',
+      '#..............................#',
+      '#.............###########......#',
+      '#..............................#',
+      '#..............................#',
+      '####################.....#######',
+      '####################.....#######',
+      '####################.....#######',
+      '#..............................#',
+      '#............E.................#',
+      '################################',
+    ],
+  },
+  {
     name: 'THE NINTH LIFE',
     canto: 'THE LAST CANTO',
     title: 'The Face It Wears',
@@ -419,7 +537,7 @@ export const LEVELS = [
       'or take the warm door, lie down, and stay.',
     ],
     hint: 'Three seals, held together, open the way. Its gaze burns the floor.',
-    atlas: [508, 420, 118, 58],
+    atlas: [176, 428, 110, 52],
     finale: true,
     // the First Cat's gaze: deterministic beam strikes (warn 50 ticks, lethal 50..95).
     // Two of the three seals stand under it — cols 13 and 17 — so an echo left on

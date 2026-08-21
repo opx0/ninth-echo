@@ -40,6 +40,12 @@ export const SOLUTIONS = {
     [{ to: [22, 16] }, { to: [25, 14] }, { to: [29, 12] }],
   ],
 
+  // Interlude: walk off each shelf, let gravity do the rest, then aim the last
+  // fall down the throat at cols 15-19.
+  'THE DROP': [
+    [{ to: [13, 5] }, { to: [22, 9] }, { to: [16, 16] }, { to: [10, 16] }],
+  ],
+
   // Two plates, two doors, two parked ghosts — one on the plinth below, one on
   // the gallery above. The chimney (block at 13-14, ledge at 15-16, gap at
   // 14-17) is the only way up, and each hop is exactly two tiles.
@@ -76,6 +82,11 @@ export const SOLUTIONS = {
   'SACRIFICE': [
     [{ to: [11, 12] }, { to: [13, 15] }, { hold: 20 }],
     [{ to: [27, 12] }],
+  ],
+
+  // Interlude: three shelves stepping down-left, then the split at cols 3-7.
+  'THE SEAM': [
+    [{ to: [18, 4] }, { to: [10, 7] }, { to: [5, 16] }, { to: [11, 16] }],
   ],
 
   // Ghost holds the floor plate; the cat climbs and exits up through the door.
@@ -123,6 +134,12 @@ export const SOLUTIONS = {
       { to: [20, 15] }, { to: [21, 13] }, { hold: 20 },
     ],
     [{ wait_until: 260 }, { to: [29, 16] }],
+  ],
+
+  // Interlude: one long plunge onto the rock shelf at row 12, a nudge right,
+  // then the vein at cols 20-24 drops you into the ember hall.
+  'THE VEIN': [
+    [{ to: [10, 11] }, { to: [21, 16] }, { to: [13, 16] }],
   ],
 
   // Three seals held at once, two of them under the gaze. Lethal windows (50..94

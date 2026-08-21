@@ -68,8 +68,10 @@ Desktop keyboard only — no touch controls.
 - **Server**: Node/Express behind Caddy (auto-HTTPS) on our own Google Cloud
   VM, serving the game and the echo/leaderboard API at `game.opxz.dev`, with
   JSON-file persistence and an optional Firestore mirror.
-- Every level is **machine-proven solvable**: a scripted bot drives the real
-  physics through the full multi-ghost solutions (see commit history).
+- Every level is **machine-proven solvable**, and the proof ships: `bun
+  tools/solve.js` runs a waypoint bot through the real physics, records its
+  inputs, and replays them as ghosts through the same code path the game uses.
+  13/13 in 38ms, non-zero exit if any chamber regresses.
 - Type-checked without a build step: `tsc --checkJs` over the plain JS
   (`bun run check`) — the browser runs exactly what's in this repo.
 
@@ -78,10 +80,15 @@ Desktop keyboard only — no touch controls.
 ## The chambers
 
 Ten rooms, each teaching the loop a new trick: holding, chaining, weighing,
-sacrificing, ascending, marching, and one paradox. Then the First Cat — a
-finale fought entirely with the loop itself: three seals held by your echoes
-while its gaze burns the floor on a pattern only repetition teaches. Or take
-the warm door, and stay.
+sacrificing, ascending, marching, and one paradox. Between the biomes sit three
+passages — THE DROP, THE SEAM, THE VEIN — traversal-only shafts with no puzzle,
+no timer and no life count, so each change of colour lands on a held breath.
+
+Then the First Cat — a finale fought entirely with the loop itself. Three
+seals must be held at once, and two of them sit directly under its gaze, so
+the echoes you park there burn off unless you time the parking against the
+sweep. Learn the pattern or the door shuts behind you. Or take the warm door,
+and stay.
 
 ![map](shots/map.png)
 

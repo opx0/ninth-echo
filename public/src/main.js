@@ -68,7 +68,7 @@ let vigilT = 0, vigilChars = 0, vigilSeen = false;
 
 // storage keys carry the game version — old saves hold indices of a level list
 // that has since changed shape, so they are ignored rather than misread
-let unlocked = Math.min(parseInt(localStorage.getItem('ninthecho_unlocked4') || '0', 10), LEVELS.length - 1);
+let unlocked = Math.min(parseInt(localStorage.getItem('ninthecho_unlocked5') || '0', 10), LEVELS.length - 1);
 mapSel = unlocked;
 
 let totalTicks = 0;
@@ -76,12 +76,17 @@ let playerName = localStorage.getItem('ninthecho_name') || '';
 let nameChars = '';
 let submitted = false;
 let board = null, boardLevel = -1;
-let claw = parseInt(localStorage.getItem('ninthecho_claw4') || '0', 10);  // bitmask by level idx
+let claw = parseInt(localStorage.getItem('ninthecho_claw5') || '0', 10);  // bitmask by level idx
 const RELIC_LEVELS = LEVELS.flatMap((lv, i) => lv.relic ? [i] : []);
+// interludes are passages, not chambers — they take no number, so the finale
+// stays the tenth chamber however many shafts sit between the cantos
+let chamberN = 0;
+const CHAMBER_NO = LEVELS.map(lv => lv.interlude ? 0 : ++chamberN);
 const clawCount = () => RELIC_LEVELS.filter(i => claw & (1 << i)).length;
 let worldEchoes = [];   // [{name, world, recs, actors}]
 
 function loadBoardFor(level) {
+  if (LEVELS[level].interlude) { board = null; boardLevel = level; return; }   // passages are not races
   fetchBoard(level).then(b => { if (b) { board = b; boardLevel = level; } });
 }
 
@@ -113,7 +118,7 @@ function enterLevel(idx) {
   submitted = false;
   nameChars = '';
   worldEchoes = [];
-  fetchBoard(idx, true).then(b => {
+  if (!LEVELS[idx].interlude) fetchBoard(idx, true).then(b => {
     if (!b || levelIdx !== idx) return;
     worldEchoes = b.echoes.slice(0, 2).map(e => makeShadow(e, idx));
     resetShadows();
@@ -219,7 +224,8 @@ function tick() {
     rewindPos -= rewindStep;
     if (rewindPos <= 0) finishRewind();
   } else if (state === 'clear') {
-    if (!playerName) {
+    const passage = !!LEVELS[levelIdx].interlude;
+    if (!playerName && !passage) {
       // first clear ever: arcade initials
       for (const code of pressed) {
         if (/^Key[A-Z]$/.test(code) && nameChars.length < 3) { nameChars += code.slice(3); sfxSafe(() => sfx.step()); }
@@ -238,18 +244,20 @@ function tick() {
     if (!submitted) {
       submitted = true;
       livesSpent += LIVES - lives + 1;   // banked once — `submitted` holds for the whole clear screen
-      const runs = ghosts.map(g => g.rec.slice(0, g.len));
-      runs.push(recording.slice(0, recLen));
-      submitClear({
-        level: levelIdx, name: playerName,
-        lives: Math.max(1, LIVES - lives + 1),
-        ticks: Math.max(30, totalTicks),
-        ghosts: runs.slice(-9),
-      });
-      boardLevel = -1;   // force the map panel to refetch with this clear included
+      if (!passage) {
+        const runs = ghosts.map(g => g.rec.slice(0, g.len));
+        runs.push(recording.slice(0, recLen));
+        submitClear({
+          level: levelIdx, name: playerName,
+          lives: Math.max(1, LIVES - lives + 1),
+          ticks: Math.max(30, totalTicks),
+          ghosts: runs.slice(-9),
+        });
+        boardLevel = -1;   // force the map panel to refetch with this clear included
+      }
     }
     clearT++;
-    if (clearT > 140) {
+    if (clearT > (passage ? 60 : 140)) {
       if (LEVELS[levelIdx].finale) {
         endingKind = clearKind === 'stay' ? 'stay' : clawCount() === RELIC_LEVELS.length ? 'sever' : 'break';
         endLines = ENDINGS[endingKind].map(l => l
@@ -259,7 +267,7 @@ function tick() {
         state = 'ending';
       } else {
         unlocked = Math.max(unlocked, levelIdx + 1);
-        localStorage.setItem('ninthecho_unlocked4', String(unlocked));
+        localStorage.setItem('ninthecho_unlocked5', String(unlocked));
         mapSel = Math.min(levelIdx + 1, LEVELS.length - 1);
         enterLevel(mapSel);   // descend straight into the next chamber
       }
@@ -387,7 +395,7 @@ function tickPlay() {
       shardText = LEVELS[levelIdx].shard || '';
       shardT = SHARD_TICKS;
       claw |= 1 << levelIdx;
-      localStorage.setItem('ninthecho_claw4', String(claw));
+      localStorage.setItem('ninthecho_claw5', String(claw));
       r3d.collectRelic();
       r3d.burst(rx + TILE / 2, ry + TILE / 2, 0xffd8a0, 26, 3.5, 50);
       r3d.pulse(0.6);
@@ -570,6 +578,7 @@ function drawScene() {
     const k = Math.min(1, clearT / 30);
     ctx.fillStyle = `rgba(10,16,30,${k * 0.6})`;
     ctx.fillRect(0, 0, W, H);
+    if (LEVELS[levelIdx].interlude) return;   // a passage just fades on down
     ctx.fillStyle = clearKind === 'stay' ? '#ffcf8a' : '#eaffff';
     ctx.globalAlpha = k;
     ctx.font = '34px monospace';
@@ -609,6 +618,46 @@ function drawScene() {
 }
 
 function drawHud() {
+  const lv = LEVELS[levelIdx];
+  // a passage has nothing to fail, so it gets no countdown and no life pips —
+  // the loop still turns underneath, it just stops shouting about it
+  if (!lv.interlude) drawLoopHud();
+
+  // level name + keys — passages are between the cantos and take no number
+  ctx.fillStyle = 'rgba(160,200,235,0.75)';
+  ctx.font = '14px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(lv.interlude ? lv.name : `${CHAMBER_NO[levelIdx]} · ${lv.name}`, W - 20, 26);
+  ctx.font = '11px monospace';
+  ctx.fillStyle = 'rgba(140,180,215,0.5)';
+  ctx.fillText('R rewind · ESC map · M mute', W - 20, 44);
+
+  // claw assembly
+  if (clawCount() > 0) {
+    ctx.save();
+    ctx.textAlign = 'right';
+    for (let i = 0; i < RELIC_LEVELS.length; i++) {
+      const cx2 = W - 30 - i * 16, cy2 = 62;
+      const have = i < clawCount();
+      ctx.strokeStyle = have ? '#ffd8a0' : 'rgba(140,120,90,0.35)';
+      if (have) { ctx.shadowColor = '#ffc060'; ctx.shadowBlur = 6; } else ctx.shadowBlur = 0;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx2 - 5, cy2, 7, -0.9, 0.9);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // hint
+  ctx.textAlign = 'center';
+  ctx.font = '14px monospace';
+  ctx.fillStyle = 'rgba(170,210,240,0.55)';
+  ctx.fillText(lv.hint, W / 2, H - 16);
+}
+
+function drawLoopHud() {
   // lives — cat-head pips
   for (let i = 0; i < LIVES; i++) {
     const x = 22 + i * 22, y = 22;
@@ -657,39 +706,6 @@ function drawHud() {
   ctx.textAlign = 'center';
   ctx.fillText(secLeft.toFixed(0), W / 2, 34);
   ctx.restore();
-
-  // level name + keys
-  ctx.fillStyle = 'rgba(160,200,235,0.75)';
-  ctx.font = '14px monospace';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${levelIdx + 1} · ${LEVELS[levelIdx].name}`, W - 20, 26);
-  ctx.font = '11px monospace';
-  ctx.fillStyle = 'rgba(140,180,215,0.5)';
-  ctx.fillText('R rewind · ESC map · M mute', W - 20, 44);
-
-  // claw assembly
-  if (clawCount() > 0) {
-    ctx.save();
-    ctx.textAlign = 'right';
-    for (let i = 0; i < RELIC_LEVELS.length; i++) {
-      const cx2 = W - 30 - i * 16, cy2 = 62;
-      const have = i < clawCount();
-      ctx.strokeStyle = have ? '#ffd8a0' : 'rgba(140,120,90,0.35)';
-      if (have) { ctx.shadowColor = '#ffc060'; ctx.shadowBlur = 6; } else ctx.shadowBlur = 0;
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.arc(cx2 - 5, cy2, 7, -0.9, 0.9);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // hint
-  ctx.textAlign = 'center';
-  ctx.font = '14px monospace';
-  ctx.fillStyle = 'rgba(170,210,240,0.55)';
-  ctx.fillText(LEVELS[levelIdx].hint, W / 2, H - 16);
 }
 
 function drawTitle() {
@@ -770,6 +786,16 @@ function roomPath(x, y, w, h, seed) {
   ctx.closePath();
 }
 
+// an interlude is not a room but a shaft: two ragged walls and the air between
+function shaftPath(x, y, w, h, seed) {
+  const jit = (k) => Math.sin(seed * 9.3 + k * 1.71) * 2.1 + Math.sin(seed * 3.7 + k * 3.9) * 1;
+  const n = Math.max(4, Math.round(h / 15));
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) ctx.lineTo(x + jit(i), y + (h * i) / n);
+  for (let i = n; i >= 0; i--) ctx.lineTo(x + w + jit(i + 41), y + (h * i) / n);
+  ctx.closePath();
+}
+
 function drawMap() {
   // ink-dark parchment ground
   ctx.fillStyle = '#0a0d16';
@@ -832,6 +858,51 @@ function drawMap() {
     const locked = i > unlocked;
     const accent = MOODS[lv.mood].accent;
     const aHex = hex(accent);
+
+    if (lv.interlude) {
+      if (locked) {
+        ctx.setLineDash([4, 6]);
+        ctx.strokeStyle = 'rgba(120,135,160,0.22)';
+        ctx.lineWidth = 1;
+        shaftPath(x, y, w, h, i);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        shaftPath(x, y, w, h, i);
+        ctx.fillStyle = '#0d1220';
+        ctx.fill();
+        // the shaft brightens downward, toward the biome it opens into
+        const gl3 = ctx.createLinearGradient(0, y, 0, y + h);
+        gl3.addColorStop(0, aHex + '0e');
+        gl3.addColorStop(1, aHex + (cleared ? '3c' : '24'));
+        ctx.fillStyle = gl3;
+        ctx.fill();
+        shaftPath(x, y, w, h, i);
+        ctx.strokeStyle = i === mapSel ? '#e8f2fa' : aHex + '99';
+        ctx.lineWidth = i === mapSel ? 1.6 : 1;
+        ctx.stroke();
+        // scoring down the walls — no floor line, a fall has no floor to survey
+        ctx.strokeStyle = aHex + '44';
+        ctx.lineWidth = 1;
+        for (let d = 11; d < h - 8; d += 14) {
+          ctx.beginPath();
+          ctx.moveTo(x + 2, y + d);
+          ctx.lineTo(x + w - 2, y + d + 4);
+          ctx.stroke();
+        }
+      }
+      if (i === mapSel) {
+        drawCat(ctx, x + w / 2, y - 6, 1, globalT * 0.03, 0, { grounded: true });
+        ctx.fillStyle = '#e8f2fa';
+        ctx.font = '12px Georgia, serif';
+        ctx.fillText(lv.name, x + w / 2, y + h + 15);
+      } else if (!locked) {
+        ctx.fillStyle = 'rgba(175,195,215,0.5)';
+        ctx.font = '10px Georgia, serif';
+        ctx.fillText(lv.name, x + w / 2, y + h + 13);
+      }
+      return;
+    }
 
     if (locked) {
       // unexplored: faint dashed outline only
@@ -968,14 +1039,16 @@ function typewriterLines(lines, chars, y0, lineH, font, color) {
   });
 }
 
-const CARD_HOLD = 55, CARD_HOLD_FINALE = 150, SHARD_TICKS = 240, VIGIL_HOLD = 90;
+const CARD_HOLD = 55, CARD_HOLD_FINALE = 150, CARD_HOLD_PASSAGE = 30, SHARD_TICKS = 240, VIGIL_HOLD = 90;
 
 function drawStory() {
   r3d.renderMenu(globalT);
   const lv = LEVELS[levelIdx];
-  const hold = lv.finale ? CARD_HOLD_FINALE : CARD_HOLD;
+  const hold = lv.finale ? CARD_HOLD_FINALE : lv.interlude ? CARD_HOLD_PASSAGE : CARD_HOLD;
   const k = Math.min(1, Math.max(0, (storyT - hold) / 30));
-  const s = k * k * (3 - 2 * k);      // 0 = card holds the screen, 1 = settled header
+  // 0 = card holds the screen, 1 = settled header. A passage never settles: it
+  // keeps its title and its region, because that is all it has to say.
+  const s = lv.interlude ? 0 : k * k * (3 - 2 * k);
   ctx.fillStyle = `rgba(4,6,12,${lv.finale ? 0.8 : 0.68})`;
   ctx.fillRect(0, 0, W, H);
 
@@ -1013,15 +1086,15 @@ function drawStory() {
   }
   ctx.restore();
 
-  if (s > 0) {
-    ctx.globalAlpha = s;
-    if (!lv.finale) {
+  if (s > 0 || lv.interlude) {
+    ctx.globalAlpha = lv.interlude ? k : s;
+    if (!lv.finale && !lv.interlude) {
       ctx.fillStyle = 'rgba(150,200,240,0.5)';
       ctx.font = '14px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`chamber ${levelIdx + 1} — ${lv.name}`, W / 2, 172);
+      ctx.fillText(`chamber ${CHAMBER_NO[levelIdx]} — ${lv.name}`, W / 2, 172);
     }
-    typewriterLines(lv.story, storyChars, 244, 40, '19px monospace', '#cfeaff');
+    typewriterLines(lv.story, storyChars, lv.interlude ? 344 : 244, lv.interlude ? 34 : 40, '19px monospace', '#cfeaff');
     ctx.globalAlpha = 1;
   }
 
