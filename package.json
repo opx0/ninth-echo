@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "bun server.js",
-    "check": "tsc"
+    "check": "tsc",
+    "proof": "bun tools/solve.js"
   },
   "engines": {
     "node": ">=20"

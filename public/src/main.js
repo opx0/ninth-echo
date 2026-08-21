@@ -2,7 +2,7 @@ import { LEVELS, ENDINGS, NARRATOR, LIVES, TILE, MOODS } from './levels.js';
 import { World, LOOP_TICKS } from './world.js';
 import { Actor, drawCat, L, R, J } from './actors.js';
 import * as r3d from './render3d.js';
-import { ensure as audioEnsure, sfx, toggleMute, isMuted } from './audio.js';
+import { ensure as audioEnsure, sfx, setMood, debug as audioDebug, toggleMute, isMuted } from './audio.js';
 import { submitClear, fetchBoard } from './net.js';
 
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('game'));
@@ -108,6 +108,7 @@ function enterLevel(idx) {
   world = new World(LEVELS[idx]);
   world.relicTaken = !!(claw & (1 << idx));
   r3d.buildLevel(world);
+  sfxSafe(() => setMood(LEVELS[idx].mood, { interlude: !!LEVELS[idx].interlude, finale: !!LEVELS[idx].finale }));
   player = new Actor(world);
   ghosts = [];
   lives = LIVES;
@@ -181,6 +182,7 @@ Object.defineProperty(window, 'NL', { value: {
   get state() { return state; },
   get echoes() { return worldEchoes.map(se => ({ name: se.name, n: se.actors.length, a: se.actors.map(x => [x.x | 0, x.y | 0, x.alive, x.frozen]) })); },
   get tick() { return loopTick; },
+  get audio() { return audioDebug(); },
 } });
 
 // ---------- ticking ----------
@@ -303,6 +305,7 @@ function tickPlay() {
     const e = world.exits.find(x => x.kind !== 'stay') || world.exits[0];
     clearT = 0; clearKind = e.kind;
     sfxSafe(() => sfx.win());
+    submitted = true;   // a forced clear never reaches the public board
     state = 'clear';
     return;
   }

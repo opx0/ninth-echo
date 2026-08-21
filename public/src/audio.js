@@ -11,7 +11,13 @@ export function isMuted() { return muted; }
 export function toggleMute() {
   muted = !muted;
   localStorage.setItem('ninthecho_mute', muted ? '1' : '0');
-  if (master) master.gain.value = muted ? 0 : 0.9;
+  // short ramp, not a jump — the bed drones are always sounding
+  if (master) {
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(muted ? 0 : 0.9, t + 0.06);
+  }
   return muted;
 }
 
@@ -129,61 +135,184 @@ export const sfx = {
   },
 };
 
-// --- music: slow minor arpeggio over a deep drone ---
-
-const SCALE = [110, 130.81, 164.81, 196, 220, 261.63, 329.63]; // A minor-ish
+// --- music: one falling-minor theme worn five ways ---
+//
+// Every biome plays the SAME motif over the SAME chord shape; what changes is
+// the root, the colour of the interval, the timbre and the pacing. Degrees are
+// semitones over the root and flatten as you descend — natural minor in the
+// under-halls, phrygian b2 by the deep, a tritone sitting in the heart — so the
+// descent darkens by construction rather than by taste.
+const BEDS = {
+  under: { root: 55,    deg: [0, 3, 7, 10, 12, 15, 19], colour: 7, cut: 1150, beat: 1400, type: 'triangle', drone: 0.09 },
+  bone:  { root: 51.91, deg: [0, 3, 5, 10, 12, 15, 17], colour: 7, cut: 900,  beat: 1550, type: 'sine',     drone: 0.10 },
+  root:  { root: 49,    deg: [0, 2, 3, 7, 10, 14, 15],  colour: 5, cut: 760,  beat: 1500, type: 'triangle', drone: 0.11 },
+  deep:  { root: 43.65, deg: [0, 1, 3, 8, 10, 13, 15],  colour: 6, cut: 620,  beat: 1200, type: 'sawtooth', drone: 0.12 },
+  heart: { root: 41.2,  deg: [0, 1, 3, 6, 8, 12, 13],   colour: 6, cut: 480,  beat: 950,  type: 'sawtooth', drone: 0.14 },
+};
+const PATTERN = [0, 2, 4, 6, 4, 2, 5, 3];
+const MOTIF = [4, 3, 1, 0, 1, 3, 2, 0];   // the theme: a slow falling minor line
 let step = 0;
+let curKey = 'under', curBed = BEDS.under, curOpts = {};
+let bedGain, bedFilt, droneA, droneB, droneAG, droneBG, airGain, menaceGain;
+
+const hz = (b, d, oct) => b.root * Math.pow(2, b.deg[d] / 12) * oct;
+
+export function setMood(key, opts = {}) {
+  const b = BEDS[key] || BEDS.under;
+  const same = b === curBed && !!opts.interlude === !!curOpts.interlude && !!opts.finale === !!curOpts.finale;
+  curKey = BEDS[key] ? key : 'under';
+  curBed = b; curOpts = opts;
+  if (!ctx || !bedGain || same) return;   // no ctx yet: startMusic picks this up
+  applyBed();
+  clearInterval(musicTimer);
+  musicTimer = setInterval(seqStep, Math.round(b.beat * (opts.finale ? 0.7 : 1)));
+}
+
+// crossfade a param: down to silence over `dip`, back up to `v` over `rise`.
+// Ramps only, and re-tuning happens at the bottom of the dip, so chambers
+// never click into each other.
+function fade(p, v, t, dip, rise) {
+  p.cancelScheduledValues(t);
+  p.setValueAtTime(p.value, t);
+  p.linearRampToValueAtTime(0.0001, t + dip);
+  p.linearRampToValueAtTime(v, t + dip + rise);
+}
+function slide(p, v, t, dt) {
+  p.cancelScheduledValues(t);
+  p.setValueAtTime(p.value, t);
+  p.linearRampToValueAtTime(v, t + dt);
+}
+
+function applyBed() {
+  const b = curBed, o = curOpts, t = ctx.currentTime, dip = 0.5, rise = 1.8;
+  const lvl = o.interlude ? 0.4 : o.finale ? 1.15 : 1;
+  fade(bedGain.gain, lvl, t, dip, rise);
+  fade(droneAG.gain, b.drone * (o.interlude ? 0.5 : 1), t, dip, rise);
+  fade(droneBG.gain, b.drone * (o.interlude ? 0.25 : 0.5), t, dip, rise);
+  droneA.frequency.setValueAtTime(b.root, t + dip);
+  droneB.frequency.setValueAtTime(b.root * Math.pow(2, b.colour / 12), t + dip);
+  bedFilt.frequency.setValueAtTime(b.cut, t + dip);
+  slide(airGain.gain, o.interlude ? 0.06 : 0.01, t, 1.4);   // passages are mostly air
+  slide(menaceGain.gain, o.finale ? 0.5 : 0, t, 2.2);
+}
 
 function padNote(f, dur) {
   const t = ctx.currentTime;
   for (const det of [-2, 2]) {
     const o = ctx.createOscillator();
-    o.type = 'triangle';
+    o.type = curBed.type;
     o.frequency.value = f;
     o.detune.value = det;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(0.16, t + dur * 0.35);
     g.gain.linearRampToValueAtTime(0, t + dur);
-    const flt = ctx.createBiquadFilter();
-    flt.type = 'lowpass';
-    flt.frequency.value = 900;
-    o.connect(flt).connect(g).connect(musicGain);
+    o.connect(g).connect(bedGain);
     o.start(t); o.stop(t + dur + 0.1);
   }
 }
 
+function leadNote(f, dur, vol) {
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'triangle';   // the theme keeps one voice everywhere
+  o.frequency.value = f;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(bedGain);
+  o.start(t); o.stop(t + dur + 0.1);
+}
+
+function seqStep() {
+  if (!ctx || ctx.state !== 'running') return;
+  const b = curBed;
+  if (curOpts.interlude) {
+    // a passage is silence with one thought in it: no pad, one note every third
+    // beat, left long enough for the cavern to answer it
+    if (step % 3 === 0) leadNote(hz(b, MOTIF[((step / 3) | 0) % MOTIF.length], 2), 3.4, 0.075);
+  } else {
+    padNote(hz(b, PATTERN[step % PATTERN.length], step % 16 >= 8 ? 1 : 0.5), b.beat / 620);
+    if (step % 2 === 1) leadNote(hz(b, MOTIF[(step >> 1) % MOTIF.length], 2), 1.9, 0.11);
+  }
+  step++;
+}
+
 function startMusic() {
   if (musicTimer) return;
-  // continuous drone
-  const t = ctx.currentTime;
-  const drone = ctx.createOscillator();
-  drone.type = 'sine';
-  drone.frequency.value = 55;
-  const dg = ctx.createGain();
-  dg.gain.setValueAtTime(0, t);
-  dg.gain.linearRampToValueAtTime(0.1, t + 4);
-  drone.connect(dg).connect(musicGain);
-  drone.start();
-  const pattern = [0, 2, 4, 6, 4, 2, 5, 3];
-  const motif = [4, 3, 1, 0, 1, 3, 2, 0];   // slow falling minor line
-  musicTimer = setInterval(() => {
-    if (!ctx || ctx.state !== 'running') return;
-    const idx = pattern[step % pattern.length];
-    padNote(SCALE[idx] * (step % 16 >= 8 ? 1 : 0.5), 2.2);
-    if (step % 2 === 1) {
-      const f = SCALE[motif[(step >> 1) % motif.length]] * 2;
-      const tm = ctx.currentTime;
-      const o = ctx.createOscillator();
-      o.type = 'triangle';
-      o.frequency.value = f;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, tm);
-      g.gain.linearRampToValueAtTime(0.11, tm + 0.015);
-      g.gain.exponentialRampToValueAtTime(0.001, tm + 1.9);
-      o.connect(g).connect(musicGain);
-      o.start(tm); o.stop(tm + 2);
-    }
-    step++;
-  }, 1400);
+  bedGain = ctx.createGain();
+  bedGain.gain.value = 0;
+  bedGain.connect(musicGain);
+  bedFilt = ctx.createBiquadFilter();
+  bedFilt.type = 'lowpass';
+  bedFilt.frequency.value = curBed.cut;
+  bedFilt.Q.value = 0.6;
+  bedFilt.connect(bedGain);
+  // two long-lived drones (root + the biome's interval). Moods re-tune these,
+  // they are never rebuilt — nothing here accumulates across a session.
+  droneA = ctx.createOscillator();
+  droneA.type = 'sine';
+  droneA.frequency.value = curBed.root;
+  droneAG = ctx.createGain();
+  droneAG.gain.value = 0;
+  droneA.connect(droneAG).connect(bedFilt);
+  droneA.start();
+  droneB = ctx.createOscillator();
+  droneB.type = 'sine';
+  droneB.frequency.value = curBed.root * Math.pow(2, curBed.colour / 12);
+  droneB.detune.value = 5;
+  droneBG = ctx.createGain();
+  droneBG.gain.value = 0;
+  droneB.connect(droneBG).connect(bedFilt);
+  droneB.start();
+  // one looping band of air; the master convolver turns it into cavern tail
+  const len = Math.floor(ctx.sampleRate * 2);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const air = ctx.createBufferSource();
+  air.buffer = buf;
+  air.loop = true;
+  const airFlt = ctx.createBiquadFilter();
+  airFlt.type = 'bandpass';
+  airFlt.frequency.value = 620;
+  airFlt.Q.value = 0.5;
+  airGain = ctx.createGain();
+  airGain.gain.value = 0.01;
+  air.connect(airFlt).connect(airGain).connect(musicGain);
+  air.start();
+  // the First Cat: a tritone press under the room, breathing on a slow LFO.
+  // The LFO rides a pre-gain so the on/off gain can close it completely.
+  const men = ctx.createOscillator();
+  men.type = 'sawtooth';
+  men.frequency.value = BEDS.heart.root * Math.pow(2, 6 / 12);
+  const menFlt = ctx.createBiquadFilter();
+  menFlt.type = 'lowpass';
+  menFlt.frequency.value = 220;
+  const pulse = ctx.createGain();
+  pulse.gain.value = 0.55;
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.42;
+  const lfoG = ctx.createGain();
+  lfoG.gain.value = 0.4;
+  lfo.connect(lfoG).connect(pulse.gain);
+  lfo.start();
+  menaceGain = ctx.createGain();
+  menaceGain.gain.value = 0;
+  men.connect(menFlt).connect(pulse).connect(menaceGain).connect(musicGain);
+  men.start();
+  applyBed();
+  musicTimer = setInterval(seqStep, Math.round(curBed.beat * (curOpts.finale ? 0.7 : 1)));
+}
+
+// read-only introspection for the smoke harness (harmless in prod)
+export function debug() {
+  return ctx && {
+    state: ctx.state, mood: curKey, opts: curOpts, master: master.gain.value,
+    bed: bedGain.gain.value, drone: droneA.frequency.value, colour: droneB.frequency.value,
+    cut: bedFilt.frequency.value, air: airGain.gain.value, menace: menaceGain.gain.value,
+    beat: curBed.beat, type: curBed.type,
+  };
 }
