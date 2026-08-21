@@ -1,4 +1,4 @@
-import { LEVELS, ENDINGS, NARRATOR, LIVES, TILE, MOODS } from './levels.js';
+import { LEVELS, ENDINGS, NARRATOR, LIVES, TILE, COLS, ROWS, MOODS } from './levels.js';
 import { World, LOOP_TICKS } from './world.js';
 import { Actor, drawCat, L, R, J } from './actors.js';
 import * as r3d from './render3d.js';
@@ -765,6 +765,39 @@ function paper() {
   return paperTex;
 }
 
+// A chamber's plan, drawn small from its own grid: solid rock, the spikes in
+// it, the doors and seals, and the way out. Scaled to fit the atlas room.
+function surveyPlan(lv, x, y, w, h, aHex, cleared) {
+  const g = lv.grid;
+  const padX = 7, padY = 6;
+  const sx = (w - padX * 2) / COLS, sy = (h - padY * 2) / ROWS;
+  const ox = x + padX, oy = y + padY;
+  ctx.save();
+  const solid = aHex + (cleared ? '62' : '3e');
+  for (let r = 1; r < ROWS - 1; r++) {
+    for (let c = 1; c < COLS - 1; c++) {
+      const ch = g[r][c];
+      if (ch === '#') { ctx.fillStyle = solid; ctx.fillRect(ox + c * sx, oy + r * sy, sx + 0.4, sy + 0.4); }
+      else if (ch === '^') { ctx.fillStyle = 'rgba(255,150,140,0.72)'; ctx.fillRect(ox + c * sx, oy + r * sy + sy * 0.4, sx + 0.3, sy * 0.6); }
+      else if (ch >= 'A' && ch <= 'C') { ctx.fillStyle = 'rgba(150,225,255,0.62)'; ctx.fillRect(ox + c * sx, oy + r * sy, sx + 0.3, sy + 0.3); }
+      else if (ch >= 'a' && ch <= 'c') { ctx.fillStyle = 'rgba(150,225,255,0.85)'; ctx.fillRect(ox + c * sx, oy + r * sy + sy * 0.5, sx + 0.3, sy * 0.5); }
+      else if (ch === 'X') { ctx.fillStyle = 'rgba(210,190,160,0.6)'; ctx.fillRect(ox + c * sx, oy + r * sy, sx + 0.3, sy + 0.3); }
+    }
+  }
+  // the ways out, and the way in
+  for (let r = 1; r < ROWS - 1; r++) {
+    for (let c = 1; c < COLS - 1; c++) {
+      const ch = g[r][c];
+      if (ch !== 'E' && ch !== 'O' && ch !== 'S') continue;
+      ctx.fillStyle = ch === 'S' ? 'rgba(210,230,250,0.55)' : ch === 'O' ? '#ffcf8a' : '#eaffff';
+      ctx.beginPath();
+      ctx.arc(ox + (c + 0.5) * sx, oy + (r + 0.5) * sy, ch === 'S' ? 1.2 : 1.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 // where a corridor meets a chamber: the point on its wall facing the next room
 function edgePoint(r, tx, ty) {
   const cx = r[0] + r[2] / 2, cy = r[1] + r[3] / 2;
@@ -966,19 +999,26 @@ function drawMap() {
       ctx.strokeStyle = i === mapSel ? '#e8f2fa' : aHex + 'aa';
       ctx.lineWidth = i === mapSel ? 1.8 : 1.1;
       ctx.stroke();
-      // interior: floor line + notches, like surveyed chambers
-      ctx.strokeStyle = aHex + '55';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x + 9, y + h - 11);
-      ctx.lineTo(x + w - 9, y + h - 11);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x + w * 0.3, y + h - 11);
-      ctx.lineTo(x + w * 0.3, y + h - 17);
-      ctx.moveTo(x + w * 0.66, y + h - 11);
-      ctx.lineTo(x + w * 0.66, y + h - 15);
-      ctx.stroke();
+      // interior: the chamber's real plan, surveyed — platforms, spikes,
+      // doors, seals and the way out, straight off the grid the room is built
+      // from. A surveyed room should show what is in it.
+      surveyPlan(lv, x, y, w, h, aHex, cleared);
+      if (lv.warden) {
+        // a watched chamber is marked as watched
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,190,150,0.7)';
+        ctx.lineWidth = 1.1;
+        const ex = x + w - 11, ey = y + h - 9;
+        ctx.beginPath();
+        ctx.moveTo(ex - 5, ey);
+        ctx.quadraticCurveTo(ex, ey - 4.5, ex + 5, ey);
+        ctx.quadraticCurveTo(ex, ey + 4.5, ex - 5, ey);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(ex, ey, 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     // claw shard pin
@@ -1021,6 +1061,57 @@ function drawMap() {
       ctx.fillText(lv.name, x + w / 2, y + h + 14);
     }
   });
+
+  // the selected chamber, named as the fable names it — the atlas should say
+  // what a room IS, not just where it sits
+  {
+    const lv = LEVELS[mapSel];
+    const px3 = W - 20, py3 = 424;
+    ctx.textAlign = 'right';
+    if (mapSel > unlocked) {
+      ctx.fillStyle = 'rgba(150,170,195,0.45)';
+      ctx.font = 'italic 12px Georgia, serif';
+      ctx.fillText('unsurveyed', px3, py3 + 18);
+    } else {
+      if (lv.canto) {
+        ctx.fillStyle = 'rgba(150,170,195,0.6)';
+        ctx.font = '10px Georgia, serif';
+        ctx.fillText(lv.canto.split('').join(' '), px3, py3);
+      }
+      ctx.fillStyle = lv.finale ? '#e8d6c0' : '#dce7f4';
+      ctx.font = `${lv.finale ? 21 : 18}px Georgia, serif`;
+      ctx.fillText(lv.title || lv.name, px3, py3 + 22);
+      ctx.strokeStyle = 'rgba(170,190,215,0.32)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px3 - 150, py3 + 32);
+      ctx.lineTo(px3, py3 + 32);
+      ctx.stroke();
+      if (lv.region) {
+        ctx.fillStyle = 'rgba(150,170,195,0.5)';
+        ctx.font = 'italic 11px Georgia, serif';
+        ctx.fillText(lv.region, px3, py3 + 47);
+      }
+      // one line of the tale, so the map carries the fable
+      const teaser = (lv.story || []).find(l => l && l !== l.toUpperCase());
+      if (teaser) {
+        ctx.fillStyle = 'rgba(196,212,232,0.62)';
+        ctx.font = '11px monospace';
+        ctx.fillText(teaser.length > 52 ? teaser.slice(0, 51) + '\u2026' : teaser, px3, py3 + 68);
+      }
+      if (lv.interlude) {
+        ctx.fillStyle = 'rgba(150,170,195,0.42)';
+        ctx.font = 'italic 10px Georgia, serif';
+        ctx.fillText('a passage \u00b7 no puzzle, no timer', px3, py3 + 86);
+      } else {
+        ctx.fillStyle = 'rgba(150,170,195,0.42)';
+        ctx.font = '10px monospace';
+        ctx.fillText(`chamber ${CHAMBER_NO[mapSel]} of ${CHAMBER_NO[LEVELS.length - 1]}`
+          + (lv.relic ? '  \u00b7  a shard lies here' : ''), px3, py3 + 86);
+      }
+    }
+    ctx.textAlign = 'center';
+  }
 
   // leaderboard: inked side table
   if (board && boardLevel === mapSel && board.top && board.top.length) {
