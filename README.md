@@ -132,13 +132,13 @@ Cat. No screenshot of those here; go and earn one.
 ```
 bun install
 bun start          # http://localhost:8080 — works fully offline (in-memory board)
-bun run proof      # the solvability proof: 13/13, exits non-zero on regression
+bun run proof      # the solvability proof: 29/29, exits non-zero on regression
 bun run check      # tsc --checkJs, no build step
 ```
 
 ## Credits
 
-Design, code, art, sound: opx0 — with AI pair-programming (Claude), as
-permitted by the jam rules. All code and assets created during the jam period.
+Design, code, art, sound: opx0. All code and assets created during the jam
+period.
 
 License: MIT
