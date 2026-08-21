@@ -25,15 +25,39 @@ chamber. Spend them wisely.
 
 The story is one continuous folktale told in two voices. **THE LOOM** speaks in
 gold uppercase and taunts you. A second, lowercase narrator tells the tale in
-past tense — and at **Canto IX** it turns out to be the First Cat itself,
-grieving the machine the humans built to steal its gift.
+past tense — and deep down it turns out to be the First Cat itself, grieving
+the machine the humans built to steal its gift. Every card is also **read
+aloud**: the browser's own voice tells the tale, and drops half an octave
+whenever the Loom speaks.
 
-Ten chambers, ten cantos, each opening on a title card. Thirteen petrified cat
-husks are scattered through the ruin; stand close and the dead speak their
-epitaph. Before the finale a scripted **vigil** plays: every life you spent
-stands up out of the floor and walks in beside you.
+Under the Loom's tale hides a second, older one — **the First Telling**: a
+cat, a door, a child, and Death coming up the lane on the sixth night,
+counting. Eight **Night bells** are hidden across the descent; ring one and
+one night of that first story is told — from the child's side or the
+mother's, depending on a choice you walk through. The ninth night is the hole
+in the narrator's memory. It can only be lived, at the bottom.
+
+Every chamber opens on a canto card. Petrified cat husks are scattered
+through the ruin; stand close and the dead speak their epitaph. Before the
+finale a scripted **vigil** plays: every life you spent stands up out of the
+floor and walks in beside you.
 
 ![canto](shots/canto.png)
+
+## The descent branches
+
+The atlas is a forked cave survey now, not a line. Twice the Loom stops the
+descent and **asks** — two doors, no menu, walking through commits:
+
+- *Who was the story for?* — the child's road (a flooding tunnel) or the
+  mother's road (a corridor of bells).
+- *Give me your dead?* — the **tithe** (one chamber walked alone, rewind
+  refused, the Loom holding your echoes) or the **long way** (five seals,
+  one door, every life yours to spend and mourn).
+
+Your answers change whose side of each Night you hear, how the vigil looks,
+and which endings the heart will offer. Off the trunk hang secret side
+chambers with their own tricks and their own bells.
 
 ## World echoes — you are never alone
 
@@ -85,18 +109,24 @@ Desktop keyboard only — no touch controls.
 - Every level is **machine-proven solvable**, and the proof ships: `bun run
   proof` runs a waypoint bot through the real physics, records its per-tick
   inputs, and replays them as ghosts through the same code path the game uses.
-  13/13, non-zero exit if any chamber regresses — the finale included, which
-  it has to clear *through* the gaze schedule to the break exit.
+  29/29, non-zero exit if any chamber regresses — water, mirrors, bells,
+  counting and both boss phases included, cleared *through* their schedules.
 - Type-checked without a build step: `tsc --checkJs` over the plain JS
   (`bun run check`) — the browser runs exactly what's in this repo.
 
 ## The chambers
 
-Ten rooms, each teaching the loop a new trick: holding, chaining, weighing,
-sacrificing, ascending, marching, and one paradox. The Loom re-dresses itself
-as you descend — rain-blue under-halls, a sepia bone archive, teal
-root-depths, the violet deep, and the ember heart. Two chambers are watched by
-a spectral warden whose gaze sweeps fixed columns on a fixed schedule.
+Twenty chambers across the branching descent, each teaching the loop a new
+trick: holding, chaining, weighing, sacrificing, ascending, marching, a
+paradox — and further down, water that rises on the loop's own schedule and
+drowns a parked echo at the same tick every time, memory tiles that want your
+footsteps back in order, bells that must ring low-far-high, a mirror room
+where every spent life comes back x-reflected with left and right swapped,
+and **Death's counting**: every hundred-and-twentieth tick, anything that
+moves is counted. A frozen echo is safe forever — red-light-green-light with
+your own dead. The Loom re-dresses itself as you descend — rain-blue
+under-halls, a sepia bone archive, teal root-depths, the violet deep, and the
+ember heart. Warden-watched chambers sweep fixed columns on a fixed schedule.
 
 ![map](shots/map.png)
 
@@ -115,17 +145,20 @@ change of colour lands on a held breath.
 
 ![passage](shots/passage.png)
 
-Then the First Cat — a finale fought entirely with the loop itself. Three
-seals must be held at once, and two of them sit directly under its gaze, so
-the echoes you park there burn off unless you time the parking against the
-sweep. The door only stays open for the gap between strikes. Learn the pattern
-or it shuts behind you. Or take the warm door, and stay.
+Then the First Cat — a finale in **three phases**, fought entirely with the
+loop itself. First the seals: three held at once, two directly under the
+gaze, so the echoes you park there burn off unless you time the parking
+against the sweep. Then the shuttle: the machine weaves faster, and Death's
+counting joins the beams. And then — no fight at all. The beams stop. The
+room is a child's room, and there is a door.
 
 ![boss](shots/boss.png)
 
-Three endings: break the Loom, stay in it, or **sever** it — the third is
-locked behind the three hidden claw shards that assemble the Claw of the First
-Cat. No screenshot of those here; go and earn one.
+Five endings: **break** the Loom; **stay** in its warmth (and if you tithed
+your dead away, learn what the machine really wanted from you); **sever** the
+threads with the Claw assembled from three hidden shards; or — carrying all
+eight Nights — stand at the ninth door and simply be still. The one verb the
+game never asked of you. The ninth door opens both ways.
 
 ## Run it yourself
 
