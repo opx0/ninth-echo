@@ -4,6 +4,7 @@ import { Actor, drawCat, L, R, J } from './actors.js';
 import * as r3d from './render3d.js';
 import { ensure as audioEnsure, sfx, setMood, debug as audioDebug, toggleMute, isMuted } from './audio.js';
 import * as cine from './video.js';
+import { say, hushSpeech } from './speech.js';
 import { submitClear, fetchBoard } from './net.js';
 
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('game'));
@@ -20,7 +21,7 @@ addEventListener('keydown', e => {
   if (!held.has(e.code)) pressed.add(e.code);
   held.add(e.code);
   audioEnsure();
-  if (e.code === 'KeyM') sfxSafe(() => toggleMute());
+  if (e.code === 'KeyM') { sfxSafe(() => toggleMute()); if (isMuted()) hushSpeech(); }
 });
 addEventListener('keyup', e => held.delete(e.code));
 addEventListener('blur', () => { held.clear(); if (state === 'play') state = 'pause'; });
@@ -165,7 +166,7 @@ function enterLevel(idx) {
     console.log('world echoes loaded:', worldEchoes.map(se => se.name).join(','));
   }).catch(e => console.error('echo load failed', e));
   newLoop();
-  const toStory = () => { storyT = 0; storyChars = 0; state = 'story'; };
+  const toStory = () => { storyT = 0; storyChars = 0; state = 'story'; say(lv.story, isMuted()); };
   // the spent lives come with you into the heart — once per run
   if (lv.vigilBefore && !vigilSeen) {
     vigilSeen = true;
@@ -174,6 +175,7 @@ function enterLevel(idx) {
       vigilChars = 0;
       sfxSafe(() => sfx.meow());
       state = 'vigil';
+      say(NARRATOR.vigil, isMuted());
     });
   } else playCineOnce(lv.cine, toStory);
 }
@@ -269,7 +271,10 @@ function tick() {
     const total = NARRATOR.vigil.join('').length;
     if (wasPressed('Enter') || wasPressed('Space')) {
       if (vigilChars < total) { vigilT = Math.max(vigilT, VIGIL_HOLD); vigilChars = total; }
-      else playCineOnce(LEVELS[levelIdx].cine, () => { storyT = 0; storyChars = 0; state = 'story'; });
+      else playCineOnce(LEVELS[levelIdx].cine, () => {
+        storyT = 0; storyChars = 0; state = 'story';
+        say(LEVELS[levelIdx].story, isMuted());
+      });
     }
   } else if (state === 'night') {
     nightT++;
@@ -277,7 +282,7 @@ function tick() {
     const total = nightLines.join('').length;
     if (wasPressed('Enter') || wasPressed('Space')) {
       if (nightChars < total) { nightT = Math.max(nightT, 40); nightChars = total; }
-      else state = 'play';
+      else { hushSpeech(); state = 'play'; }
     }
   } else if (state === 'story') {
     storyT++;
@@ -286,7 +291,7 @@ function tick() {
     const total = LEVELS[levelIdx].story.join('').length;
     if (wasPressed('Enter') || wasPressed('Space') || wasPressed('KeyR')) {
       if (storyChars < total) { storyT = Math.max(storyT, hold); storyChars = total; }
-      else state = 'play';
+      else { hushSpeech(); state = 'play'; }
     }
   } else if (state === 'play') {
     tickPlay();
@@ -342,6 +347,7 @@ function tick() {
         playCine(clip, () => {
           state = 'ending';
           if (endingKind === 'release') sfxSafe(() => sfx.bellFinal());
+          say(endLines, isMuted());
         });
       } else {
         // walk the graph: the exit taken decides where the descent goes
@@ -369,7 +375,7 @@ function tick() {
     const total = endLines.join('').length;
     if (wasPressed('Enter') || wasPressed('Space')) {
       if (endChars < total) endChars = total;
-      else { state = 'title'; mapSel = furthestOpen(); }
+      else { hushSpeech(); state = 'title'; mapSel = furthestOpen(); }
     }
   }
 
@@ -530,7 +536,7 @@ function tickPlay() {
     nightLines = save.flags.heard === 'mother' ? night.mother : night.child;
     nightChars = 0;
     nightT = 0;
-    playCineOnce(night.cine, () => { state = 'night'; });
+    playCineOnce(night.cine, () => { state = 'night'; say([nightTitle, ...nightLines], isMuted()); });
     return;
   }
 
