@@ -765,9 +765,37 @@ function paper() {
   return paperTex;
 }
 
+// where a corridor meets a chamber: the point on its wall facing the next room
+function edgePoint(r, tx, ty) {
+  const cx = r[0] + r[2] / 2, cy = r[1] + r[3] / 2;
+  const dx = tx - cx, dy = ty - cy;
+  const s = Math.min(dx ? (r[2] / 2) / Math.abs(dx) : 1e9, dy ? (r[3] / 2) / Math.abs(dy) : 1e9);
+  return [cx + dx * s, cy + dy * s];
+}
+
+// one wall of a winding passage; `side` picks which wall. Same seed, same
+// wander, every frame.
+function corridorPath(ax, ay, bx, by, seed, side) {
+  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const bow = Math.sin(seed * 2.7) * Math.min(34, len * 0.24);
+  const steps = Math.max(10, Math.round(len / 12));
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const bend = Math.sin(Math.PI * t) * bow;
+    const half = 3.6 + Math.sin(seed * 1.7 + t * 6.1) * 1.3;
+    const wob = Math.sin(seed * 5.3 + t * 11.4) * 1.5 + Math.sin(seed * 2.1 + t * 23.7) * 0.7;
+    const off = side * half + wob;
+    const px2 = ax + dx * t + nx * (bend + off);
+    const py2 = ay + dy * t + ny * (bend + off);
+    if (i === 0) ctx.moveTo(px2, py2); else ctx.lineTo(px2, py2);
+  }
+}
+
 // jittered organic room outline — same seed, same wobble, every frame
 function roomPath(x, y, w, h, seed) {
-  const jit = (k) => Math.sin(seed * 13.7 + k * 2.31) * 2.4 + Math.sin(seed * 5.1 + k * 4.7) * 1.2;
+  const jit = (k) => Math.sin(seed * 13.7 + k * 2.31) * 4.2 + Math.sin(seed * 5.1 + k * 4.7) * 2.1 + Math.sin(seed * 2.3 + k * 1.13) * 2.6;
   const pts = [];
   const per = 2 * (w + h);
   const step = 13;
@@ -835,21 +863,18 @@ function drawMap() {
 
   const hex = n => '#' + n.toString(16).padStart(6, '0');
 
-  // corridors: narrow inked channels, chamber to chamber down the list
+  // corridors: passages bored through rock, not ruled lines — they leave a
+  // chamber at its wall, bow off the straight, and wander on the way over
   for (let i = 1; i < LEVELS.length; i++) {
     const ra = LEVELS[i - 1].atlas, rb = LEVELS[i].atlas;
-    const ax = ra[0] + ra[2] / 2, ay = ra[1] + ra[3] / 2;
-    const bx2 = rb[0] + rb[2] / 2, by2 = rb[1] + rb[3] / 2;
-    const dx = bx2 - ax, dy = by2 - ay, len = Math.hypot(dx, dy);
-    const px2 = -dy / len * 3.5, py2 = dx / len * 3.5;
+    const [ax, ay] = edgePoint(ra, rb[0] + rb[2] / 2, rb[1] + rb[3] / 2);
+    const [bx2, by2] = edgePoint(rb, ra[0] + ra[2] / 2, ra[1] + ra[3] / 2);
     const open = i <= unlocked;
     ctx.strokeStyle = open ? 'rgba(150,170,200,0.4)' : 'rgba(110,125,150,0.14)';
     ctx.lineWidth = 1.2;
     ctx.setLineDash(open ? [] : [3, 5]);
     for (const sgn of [1, -1]) {
-      ctx.beginPath();
-      ctx.moveTo(ax + px2 * sgn, ay + py2 * sgn);
-      ctx.lineTo(bx2 + px2 * sgn, by2 + py2 * sgn);
+      corridorPath(ax, ay, bx2, by2, i, sgn);
       ctx.stroke();
     }
     ctx.setLineDash([]);
