@@ -113,6 +113,73 @@ export const sfx = {
     noise({ dur: 0.35, vol: 0.3, f: 1800, f1: 400, q: 1.2 });
     tone({ f0: 1400, f1: 300, dur: 0.3, type: 'sawtooth', vol: 0.12 });
   },
+  // the bell: two detuned partials an octave apart, rung through the cavern.
+  // Pitch rides the biome root, so the dings darken as you descend.
+  bell(vol = 0.3) {
+    if (!ctx) return;
+    const f = curBed.root * 16;
+    const t = ctx.currentTime;
+    for (const [mult, v] of [[1, vol], [2.02, vol * 0.45], [2.99, vol * 0.18]]) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f * mult;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(v, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+      o.connect(g).connect(sfxGain);
+      o.start(t); o.stop(t + 1.5);
+    }
+  },
+  // the last bell of all: one pure octave, the only bright major sound
+  bellFinal() {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (const [f, v, d] of [[880, 0.32, 3.2], [1760, 0.14, 2.6]]) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(v, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, t + d);
+      o.connect(g).connect(sfxGain);
+      o.start(t); o.stop(t + d + 0.1);
+    }
+  },
+  // the ninth ding is silence: duck everything to nothing for one held beat
+  hush(hold = 0.9) {
+    if (!ctx || !master) return;
+    const t = ctx.currentTime;
+    const back = muted ? 0 : 0.9;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(0.0001, t + 0.08);
+    master.gain.setValueAtTime(0.0001, t + 0.08 + hold);
+    master.gain.linearRampToValueAtTime(back, t + 0.08 + hold + 0.6);
+  },
+  // the mother's song — the falling motif, stated once in major, music-box slow
+  lullaby() {
+    if (!ctx) return;
+    const MAJ = [0, 2, 4, 5, 7, 9, 11, 12];
+    const line = [4, 3, 1, 0, 1, 3, 2, 0];
+    const t0 = ctx.currentTime;
+    line.forEach((d, i) => {
+      const f = 440 * Math.pow(2, MAJ[d] / 12);
+      const t = t0 + i * 0.62;
+      for (const mult of [1, 2]) {
+        const o = ctx.createOscillator();
+        o.type = 'triangle';
+        o.frequency.value = f * mult;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(mult === 1 ? 0.16 : 0.05, t + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+        o.connect(g).connect(sfxGain);
+        o.start(t); o.stop(t + 1.5);
+      }
+    });
+  },
   meow() {
     if (!ctx) return;
     const t = ctx.currentTime;

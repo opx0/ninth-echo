@@ -1,8 +1,9 @@
-import { LEVELS, ENDINGS, NARRATOR, LIVES, TILE, COLS, ROWS, MOODS } from './levels.js';
-import { World, LOOP_TICKS } from './world.js';
+import { LEVELS, BY_ID, INDEX_OF, ENDINGS, NARRATOR, NIGHTS, LIVES, TILE, COLS, ROWS, MOODS } from './levels.js';
+import { World } from './world.js';
 import { Actor, drawCat, L, R, J } from './actors.js';
 import * as r3d from './render3d.js';
 import { ensure as audioEnsure, sfx, setMood, debug as audioDebug, toggleMute, isMuted } from './audio.js';
+import * as cine from './video.js';
 import { submitClear, fetchBoard } from './net.js';
 
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('game'));
@@ -54,7 +55,7 @@ let noLivesFlash = 0;
 let hitStop = 0, deathFlash = 0;
 
 let rewindPos = 0, rewindStep = 1, rewindLine = '';
-let clearT = 0, clearKind = 'next';
+let clearT = 0, clearKind = 'next', clearCh = 'E';
 let failT = 0;
 let storyChars = 0, storyT = 0;
 let endingKind = 'break', endChars = 0;
@@ -65,29 +66,63 @@ let livesSpent = 0;                     // lives left behind across the whole de
 let epiText = '', epiAlpha = 0;         // husk epitaph, faded by proximity
 let shardText = '', shardT = 0;
 let vigilT = 0, vigilChars = 0, vigilSeen = false;
+let nightTitle = '', nightLines = /** @type {string[]} */ ([]), nightChars = 0, nightT = 0;
+let chairT = 0, stillT = 0;
+let cineThen = null;
 
-// storage keys carry the game version — old saves hold indices of a level list
-// that has since changed shape, so they are ignored rather than misread
-let unlocked = Math.min(parseInt(localStorage.getItem('ninthecho_unlocked5') || '0', 10), LEVELS.length - 1);
-mapSel = unlocked;
+// one save blob, versioned by its key — old saves indexed a level list that
+// has since changed shape, so they are ignored rather than misread
+const SAVE_KEY = 'ninthecho_save6';
+const blankSave = () => ({
+  cleared: [],            // level ids beaten
+  opened: ['wake'],       // level ids reachable on the atlas
+  flags: { heard: null, traded: null, sat: false },   // the three askings
+  bells: [],              // nights of the First Telling found (1..8)
+  seen: [],               // cutscene ids already played
+  claw: [],               // level ids whose shard was taken
+});
+let save = blankSave();
+try { save = { ...blankSave(), ...JSON.parse(localStorage.getItem(SAVE_KEY) || 'x') }; } catch { /* fresh */ }
+const persist = () => localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+const isOpen = id => save.opened.includes(id);
+const openId = id => { if (id && !save.opened.includes(id)) save.opened.push(id); };
+const RELIC_IDS = LEVELS.filter(lv => lv.relic).map(lv => lv.id);
+const clawCount = () => save.claw.length;
+
+const selectable = i => i >= 0 && i < LEVELS.length && !LEVELS[i].hidden && isOpen(LEVELS[i].id);
+const furthestOpen = () => { let k = 0; LEVELS.forEach((lv, i) => { if (selectable(i)) k = i; }); return k; };
+mapSel = furthestOpen();
 
 let totalTicks = 0;
 let playerName = localStorage.getItem('ninthecho_name') || '';
 let nameChars = '';
 let submitted = false;
 let board = null, boardLevel = -1;
-let claw = parseInt(localStorage.getItem('ninthecho_claw5') || '0', 10);  // bitmask by level idx
-const RELIC_LEVELS = LEVELS.flatMap((lv, i) => lv.relic ? [i] : []);
-// interludes are passages, not chambers — they take no number, so the finale
-// stays the tenth chamber however many shafts sit between the cantos
+// interludes are passages and boss phases are hidden — neither takes a number
 let chamberN = 0;
-const CHAMBER_NO = LEVELS.map(lv => lv.interlude ? 0 : ++chamberN);
-const clawCount = () => RELIC_LEVELS.filter(i => claw & (1 << i)).length;
+const CHAMBER_NO = LEVELS.map(lv => (lv.interlude || lv.hidden) ? 0 : ++chamberN);
 let worldEchoes = [];   // [{name, world, recs, actors}]
 
+// a cutscene, then `then` — falls straight through if the clip is missing
+function playCine(id, then) {
+  if (!id) { then(); return; }
+  state = 'cine';
+  cineThen = then;
+  const go = () => { const f = cineThen; cineThen = null; if (f) f(); };
+  cine.play(id).then(go).catch(go);
+}
+function playCineOnce(id, then) {
+  if (!id || save.seen.includes(id)) { then(); return; }
+  save.seen.push(id);
+  persist();
+  playCine(id, then);
+}
+
 function loadBoardFor(level) {
-  if (LEVELS[level].interlude) { board = null; boardLevel = level; return; }   // passages are not races
-  fetchBoard(level).then(b => { if (b) { board = b; boardLevel = level; } });
+  const lv = LEVELS[level];
+  // passages are not races; mirror rooms would replay foreign echoes unmirrored
+  if (lv.interlude || lv.hidden || lv.mirror) { board = null; boardLevel = level; return; }
+  fetchBoard(lv.id).then(b => { if (b) { board = b; boardLevel = level; } });
 }
 
 function makeShadow(echo, idx) {
@@ -104,11 +139,13 @@ function resetShadows() {
 
 // ---------- flow ----------
 function enterLevel(idx) {
+  const lv = LEVELS[idx];
   levelIdx = idx;
-  world = new World(LEVELS[idx]);
-  world.relicTaken = !!(claw & (1 << idx));
+  world = new World(lv);
+  world.relicTaken = save.claw.includes(lv.id);
+  world.nightTaken = !!(world.night && save.bells.includes(world.night.n));
   r3d.buildLevel(world);
-  sfxSafe(() => setMood(LEVELS[idx].mood, { interlude: !!LEVELS[idx].interlude, finale: !!LEVELS[idx].finale }));
+  sfxSafe(() => setMood(lv.mood, { interlude: !!lv.interlude, finale: !!lv.finale }));
   player = new Actor(world);
   ghosts = [];
   lives = LIVES;
@@ -118,29 +155,36 @@ function enterLevel(idx) {
   totalTicks = 0;
   submitted = false;
   nameChars = '';
+  chairT = 0;
+  stillT = 0;
   worldEchoes = [];
-  if (!LEVELS[idx].interlude) fetchBoard(idx, true).then(b => {
+  if (!lv.interlude && !lv.hidden && !lv.mirror) fetchBoard(lv.id, true).then(b => {
     if (!b || levelIdx !== idx) return;
     worldEchoes = b.echoes.slice(0, 2).map(e => makeShadow(e, idx));
     resetShadows();
     console.log('world echoes loaded:', worldEchoes.map(se => se.name).join(','));
   }).catch(e => console.error('echo load failed', e));
   newLoop();
+  const toStory = () => { storyT = 0; storyChars = 0; state = 'story'; };
   // the spent lives come with you into the heart — once per run
-  if (LEVELS[idx].finale && !vigilSeen) {
+  if (lv.vigilBefore && !vigilSeen) {
     vigilSeen = true;
-    vigilT = 0;
-    vigilChars = 0;
-    sfxSafe(() => sfx.meow());
-    state = 'vigil';
-  } else state = 'story';
+    playCine('vigil', () => {
+      vigilT = 0;
+      vigilChars = 0;
+      sfxSafe(() => sfx.meow());
+      state = 'vigil';
+    });
+  } else playCineOnce(lv.cine, toStory);
 }
 
 function newLoop() {
   world.resetLoop();
   ghostActors = ghosts.map(() => new Actor(world, true));
+  // past the glass, every spent life comes back x-reflected
+  if (LEVELS[levelIdx].mirror) for (const a of ghostActors) a.x = COLS * TILE - world.spawn.x - a.w;
   player.reset();
-  recording = new Uint8Array(LOOP_TICKS);
+  recording = new Uint8Array(world.loopTicks);
   recLen = 0;
   loopTick = 0;
   history = [];
@@ -165,10 +209,18 @@ function startRewind() {
 }
 
 function finishRewind() {
-  ghosts.push({ rec: recording.slice(0, recLen), len: recLen });
+  // in the tithe the Loom is holding your echoes — a spent life leaves nothing
+  if (!LEVELS[levelIdx].norewind) ghosts.push({ rec: recording.slice(0, recLen), len: recLen });
   lives--;
-  if (lives <= 0) { failT = 0; state = 'fail'; sfxSafe(() => sfx.death()); }
-  else newLoop();
+  if (lives <= 0) {
+    // the ninth ding is silence
+    failT = 0;
+    state = 'fail';
+    sfxSafe(() => sfx.hush());
+  } else {
+    sfxSafe(() => sfx.bell());
+    newLoop();
+  }
 }
 
 function resetRoom() {
@@ -180,6 +232,7 @@ function resetRoom() {
 // debug introspection (harmless in prod)
 Object.defineProperty(window, 'NL', { value: {
   get state() { return state; },
+  get level() { return LEVELS[levelIdx] && LEVELS[levelIdx].id; },
   get echoes() { return worldEchoes.map(se => ({ name: se.name, n: se.actors.length, a: se.actors.map(x => [x.x | 0, x.y | 0, x.alive, x.frozen]) })); },
   get tick() { return loopTick; },
   get audio() { return audioDebug(); },
@@ -196,20 +249,35 @@ function tick() {
       sfxSafe(() => sfx.meow());
       livesSpent = 0;
       vigilSeen = false;
-      state = 'map';
+      playCineOnce('open', () => { state = 'map'; });
     }
+  } else if (state === 'cine') {
+    if (wasPressed('Enter') || wasPressed('Space') || wasPressed('Escape')) cine.skip();
   } else if (state === 'map') {
     if (boardLevel !== mapSel && globalT % 30 === 0) loadBoardFor(mapSel);
-    if (wasPressed('ArrowLeft') || wasPressed('KeyA')) { mapSel = Math.max(0, mapSel - 1); sfxSafe(() => sfx.step()); loadBoardFor(mapSel); }
-    if (wasPressed('ArrowRight') || wasPressed('KeyD')) { mapSel = Math.min(unlocked, mapSel + 1); sfxSafe(() => sfx.step()); loadBoardFor(mapSel); }
-    if (wasPressed('Enter') || wasPressed('Space')) { sfxSafe(() => sfx.plateOn()); enterLevel(mapSel); }
+    for (const dir of [-1, 1]) {
+      const key = dir < 0 ? (wasPressed('ArrowLeft') || wasPressed('KeyA')) : (wasPressed('ArrowRight') || wasPressed('KeyD'));
+      if (!key) continue;
+      let j = mapSel + dir;
+      while (j >= 0 && j < LEVELS.length && !selectable(j)) j += dir;
+      if (selectable(j)) { mapSel = j; sfxSafe(() => sfx.step()); loadBoardFor(mapSel); }
+    }
+    if ((wasPressed('Enter') || wasPressed('Space')) && selectable(mapSel)) { sfxSafe(() => sfx.plateOn()); enterLevel(mapSel); }
   } else if (state === 'vigil') {
     vigilT++;
     if (vigilT > VIGIL_HOLD) vigilChars += 1.1;
     const total = NARRATOR.vigil.join('').length;
     if (wasPressed('Enter') || wasPressed('Space')) {
       if (vigilChars < total) { vigilT = Math.max(vigilT, VIGIL_HOLD); vigilChars = total; }
-      else { storyT = 0; storyChars = 0; state = 'story'; }
+      else playCineOnce(LEVELS[levelIdx].cine, () => { storyT = 0; storyChars = 0; state = 'story'; });
+    }
+  } else if (state === 'night') {
+    nightT++;
+    if (nightT > 40) nightChars += 1.2;
+    const total = nightLines.join('').length;
+    if (wasPressed('Enter') || wasPressed('Space')) {
+      if (nightChars < total) { nightT = Math.max(nightT, 40); nightChars = total; }
+      else state = 'play';
     }
   } else if (state === 'story') {
     storyT++;
@@ -226,8 +294,10 @@ function tick() {
     rewindPos -= rewindStep;
     if (rewindPos <= 0) finishRewind();
   } else if (state === 'clear') {
-    const passage = !!LEVELS[levelIdx].interlude;
-    if (!playerName && !passage) {
+    const lv = LEVELS[levelIdx];
+    const passage = !!lv.interlude;
+    const phase = clearKind === 'phase';
+    if (!playerName && !passage && !lv.hidden) {
       // first clear ever: arcade initials
       for (const code of pressed) {
         if (/^Key[A-Z]$/.test(code) && nameChars.length < 3) { nameChars += code.slice(3); sfxSafe(() => sfx.step()); }
@@ -246,11 +316,11 @@ function tick() {
     if (!submitted) {
       submitted = true;
       livesSpent += LIVES - lives + 1;   // banked once — `submitted` holds for the whole clear screen
-      if (!passage) {
+      if (!passage && !lv.hidden && !lv.mirror) {
         const runs = ghosts.map(g => g.rec.slice(0, g.len));
         runs.push(recording.slice(0, recLen));
         submitClear({
-          level: levelIdx, name: playerName,
+          level: lv.id, name: playerName,
           lives: Math.max(1, LIVES - lives + 1),
           ticks: Math.max(30, totalTicks),
           ghosts: runs.slice(-9),
@@ -259,19 +329,33 @@ function tick() {
       }
     }
     clearT++;
-    if (clearT > (passage ? 60 : 140)) {
-      if (LEVELS[levelIdx].finale) {
-        endingKind = clearKind === 'stay' ? 'stay' : clawCount() === RELIC_LEVELS.length ? 'sever' : 'break';
+    if (clearT > (phase ? 40 : passage ? 60 : 140)) {
+      if (clearKind === 'stay' || clearKind === 'release' || lv.endings) {
+        endingKind = clearKind === 'release' ? 'release'
+          : clearKind === 'stay' ? (save.flags.traded ? 'wear' : 'stay')
+            : clawCount() === RELIC_IDS.length ? 'sever' : 'break';
         endLines = ENDINGS[endingKind].map(l => l
           .replace(/\{spent\} lives/g, livesSpent === 1 ? '1 life' : `${livesSpent} lives`)
           .replace(/\{spent\}/g, String(livesSpent)));
         endChars = 0;
-        state = 'ending';
+        const clip = 'end-' + (endingKind === 'wear' ? 'stay' : endingKind);
+        playCine(clip, () => {
+          state = 'ending';
+          if (endingKind === 'release') sfxSafe(() => sfx.bellFinal());
+        });
       } else {
-        unlocked = Math.max(unlocked, levelIdx + 1);
-        localStorage.setItem('ninthecho_unlocked5', String(unlocked));
-        mapSel = Math.min(levelIdx + 1, LEVELS.length - 1);
-        enterLevel(mapSel);   // descend straight into the next chamber
+        // walk the graph: the exit taken decides where the descent goes
+        const route = lv.routes && lv.routes[clearCh];
+        if (route && route.set) Object.assign(save.flags, route.set);
+        if (!save.cleared.includes(lv.id)) save.cleared.push(lv.id);
+        if (lv.exclusive) openId(route && route.to);
+        else { (lv.next || []).forEach(openId); if (route) openId(route.to); }
+        persist();
+        const to = (route && route.to) || (lv.next && lv.next[0]);
+        if (to != null) {
+          mapSel = LEVELS[INDEX_OF[to]].hidden ? mapSel : INDEX_OF[to];
+          enterLevel(INDEX_OF[to]);   // descend straight into the next chamber
+        } else state = 'map';
       }
     }
   } else if (state === 'pause') {
@@ -285,7 +369,7 @@ function tick() {
     const total = endLines.join('').length;
     if (wasPressed('Enter') || wasPressed('Space')) {
       if (endChars < total) endChars = total;
-      else { state = 'title'; mapSel = unlocked; }
+      else { state = 'title'; mapSel = furthestOpen(); }
     }
   }
 
@@ -302,21 +386,27 @@ function tickPlay() {
     player.vy = 0;
   }
   if (DEBUG_MODE && wasPressed('KeyK')) {
-    const e = world.exits.find(x => x.kind !== 'stay') || world.exits[0];
-    clearT = 0; clearKind = e.kind;
+    const e = world.exits.find(x => x.kind !== 'stay' && x.kind !== 'release') || world.exits[0];
+    clearT = 0; clearKind = e.kind; clearCh = e.ch;
     sfxSafe(() => sfx.win());
     submitted = true;   // a forced clear never reaches the public board
     state = 'clear';
     return;
   }
+  if (DEBUG_MODE && wasPressed('Digit8')) { save.bells = [1, 2, 3, 4, 5, 6, 7, 8]; persist(); }
+  if (DEBUG_MODE && wasPressed('Digit9')) { save.claw = RELIC_IDS.slice(); persist(); }
 
+  const lv = LEVELS[levelIdx];
+  const mirror = !!lv.mirror;
   const mask = moveMask();
-  if (recLen < LOOP_TICKS) recording[recLen++] = mask;
+  if (recLen < world.loopTicks) recording[recLen++] = mask;
   totalTicks++;
+  // Death's arithmetic — anything that moves on the count is counted
+  const beat = world.countPhase(loopTick) === 'strike';
 
   // world echoes replay in their own shadow worlds — they can never touch your puzzle
   for (const se of worldEchoes) {
-    se.world.tickBoxes();
+    se.world.tickBoxes(loopTick);
     const shAlive = [];
     se.actors.forEach((a, i) => {
       const rec = se.recs[i];
@@ -325,21 +415,24 @@ function tickPlay() {
       a.tick(a.frozen ? 0 : rec[loopTick]);
       if (se.world.hitsBeam(a, loopTick)) a.die();
       if (a.alive && !a.frozen && se.world.hitsSpike(a)) a.die();
+      if (a.alive && !a.frozen && beat && rec[loopTick] !== 0) a.die();
       if (a.alive) shAlive.push(a);
     });
     se.world.tickPlatesAndDoors(shAlive);
   }
 
-  world.tickBoxes();
+  world.tickBoxes(loopTick);
 
   // ghosts replay oldest-first, then the player — fixed order keeps physics deterministic
   const alive = [];
+  const swapLR = m => ((m & L) ? R : 0) | ((m & R) ? L : 0) | (m & J);
   ghostActors.forEach((a, i) => {
     const g = ghosts[i];
     if (!a.alive) { a.tick(0); return; }
     if (loopTick < g.len) a.frozen = false;
     else a.frozen = true;
-    a.tick(a.frozen ? 0 : g.rec[loopTick]);
+    const gm = a.frozen ? 0 : (mirror ? swapLR(g.rec[loopTick]) : g.rec[loopTick]);
+    a.tick(gm);
     if (world.hitsBeam(a, loopTick)) {
       a.die();
       r3d.burst(a.x + a.w / 2, a.y + a.h / 2, 0xffb0a0, 14, 3);
@@ -347,6 +440,10 @@ function tickPlay() {
     if (a.alive && !a.frozen && world.hitsSpike(a)) {
       a.die();
       r3d.burst(a.x + a.w / 2, a.y + a.h / 2, 0x8ce6ff, 12, 2.2);
+    }
+    if (a.alive && !a.frozen && beat && g.rec[loopTick] !== 0) {
+      a.die();
+      r3d.burst(a.x + a.w / 2, a.y + a.h / 2, 0xe8c8f8, 14, 3);
     }
     if (a.alive) alive.push(a);
   });
@@ -358,11 +455,15 @@ function tickPlay() {
   if (player.alive) alive.push(player);
 
   const prevPressed = world.plates.map(p => p.pressed);
+  const prevBells = world.bellSeq ? world.bellSeq.length : 0;
   world.tickPlatesAndDoors(alive);
   world.plates.forEach((p, i) => {
     if (p.pressed && !prevPressed[i]) sfxSafe(() => sfx.plateOn());
     if (!p.pressed && prevPressed[i]) sfxSafe(() => sfx.plateOff());
   });
+  // bells: a ding for each ring, a sour note when the order breaks
+  if (world.bellSeq.length > prevBells) sfxSafe(() => sfx.bell(0.2));
+  else if (prevBells > 0 && world.bellSeq.length === 0 && !world.bellDone) sfxSafe(() => sfx.plateOff());
   world.doors.forEach((d, i) => {
     if (d.open > 0.15 && !doorSfxDone[i]) {
       doorSfxDone[i] = true;
@@ -390,6 +491,14 @@ function tickPlay() {
     r3d.shake(10);
     r3d.burst(player.x + player.w / 2, player.y + player.h / 2, 0xff8f8f, 22, 3.5);
   }
+  if (player.alive && beat && mask !== 0) {
+    player.die();
+    sfxSafe(() => sfx.death());
+    hitStop = 6;
+    deathFlash = 5;
+    r3d.shake(10);
+    r3d.burst(player.x + player.w / 2, player.y + player.h / 2, 0xe8c8f8, 22, 3.5);
+  }
 
   if (player.alive && world.relic && !world.relicTaken) {
     const rx = world.relic.c * TILE, ry = world.relic.r * TILE;
@@ -397,8 +506,8 @@ function tickPlay() {
       world.relicTaken = true;
       shardText = LEVELS[levelIdx].shard || '';
       shardT = SHARD_TICKS;
-      claw |= 1 << levelIdx;
-      localStorage.setItem('ninthecho_claw5', String(claw));
+      if (!save.claw.includes(lv.id)) save.claw.push(lv.id);
+      persist();
       r3d.collectRelic();
       r3d.burst(rx + TILE / 2, ry + TILE / 2, 0xffd8a0, 26, 3.5, 50);
       r3d.pulse(0.6);
@@ -406,16 +515,70 @@ function tickPlay() {
     }
   }
 
+  // a Night bell — one night of the First Telling, told the way you chose
+  if (player.alive && world.night && !save.bells.includes(world.night.n)
+    && world.overlapsTile(player, world.night.c, world.night.r)) {
+    const n = world.night.n;
+    save.bells.push(n);
+    world.nightTaken = true;
+    persist();
+    sfxSafe(() => sfx.bell(0.3));
+    r3d.burst(world.night.c * TILE + TILE / 2, world.night.r * TILE + TILE / 2, 0xffe2a8, 24, 3, 50);
+    r3d.pulse(0.5);
+    const night = NIGHTS[n];
+    nightTitle = night.title;
+    nightLines = save.flags.heard === 'mother' ? night.mother : night.child;
+    nightChars = 0;
+    nightT = 0;
+    playCineOnce(night.cine, () => { state = 'night'; });
+    return;
+  }
+
+  // the chair in the nursery — sitting where she sat is a choice too
+  if (lv.chair && !save.flags.sat && player.alive
+    && world.overlapsTile(player, lv.chair[0], lv.chair[1]) && mask === 0 && player.grounded) {
+    if (++chairT === 120) {
+      save.flags.sat = true;
+      persist();
+      shardText = 'The chair was still warm. It is always still warm. That is the whole machine.';
+      shardT = SHARD_TICKS + 120;
+      playCineOnce('lullaby', () => { state = 'play'; });
+      sfxSafe(() => sfx.lullaby());
+      return;
+    }
+  } else chairT = 0;
+
+  // the ninth door opens to stillness, and only to a whole telling
+  if (lv.endings && player.alive) {
+    const nd = world.exits.find(x => x.kind === 'release');
+    if (nd && world.overlapsTile(player, nd.c, nd.r) && mask === 0 && player.grounded) {
+      stillT++;
+      if (stillT === 300) {
+        if (save.bells.length >= 8) {
+          clearT = 0; clearKind = 'release'; clearCh = 'N';
+          sfxSafe(() => sfx.hush());
+          r3d.burst(nd.c * TILE + TILE / 2, nd.r * TILE + TILE / 2, 0xffffff, 40, 4, 60);
+          r3d.loomRelease();
+          state = 'clear';
+          return;
+        }
+        shardText = NARRATOR.doorRefuse;
+        shardT = SHARD_TICKS;
+      }
+    } else stillT = 0;
+  }
+
   if (player.alive) {
     const e = world.exitHit(player);
-    if (e) {
+    if (e && e.kind !== 'release') {   // the ninth door does not open to touch
       clearT = 0;
       clearKind = e.kind;
+      clearCh = e.ch;
       r3d.burst(e.c * TILE + TILE / 2, e.r * TILE + TILE / 2, e.kind === 'stay' ? 0xffcf8a : 0xeaffff, 34, 4, 55);
       sfxSafe(() => sfx.win());
-      if (LEVELS[levelIdx].finale) {
-        if (e.kind === 'stay') r3d.loomStay(); else { r3d.loomBreak(); sfxSafe(() => sfx.death()); if (clawCount() === RELIC_LEVELS.length) r3d.shake(16); }
-      }
+      if (e.kind === 'stay') r3d.loomStay();
+      else if (lv.endings) { r3d.loomBreak(); sfxSafe(() => sfx.death()); if (clawCount() === RELIC_IDS.length) r3d.shake(16); }
+      else if (e.kind === 'phase') r3d.pulse(0.6);
       state = 'clear';
       return;
     }
@@ -435,20 +598,28 @@ function tickPlay() {
       if (loopTick === t0 + 50) { sfxSafe(() => sfx.beamStrike()); r3d.shake(4); }
     }
 
+  // Death's counting audio cues
+  if (world.def.counting) {
+    const m = loopTick % world.def.counting.period;
+    if (m === world.def.counting.period - 30) sfxSafe(() => sfx.beamWarn());
+    if (m === 0 && loopTick > 0) sfxSafe(() => sfx.plateOff());
+  }
+
   // countdown warning beeps in the last 3 seconds
-  const secLeft = Math.ceil((LOOP_TICKS - loopTick) / 60);
+  const secLeft = Math.ceil((world.loopTicks - loopTick) / 60);
   if (secLeft <= 3 && secLeft !== lastWarnSec) { lastWarnSec = secLeft; sfxSafe(() => sfx.tickWarn()); }
 
   if (!player.alive && player.deathT > 45) { startRewind(); return; }
 
   if (wasPressed('KeyR')) {
-    if (lives > 1) { startRewind(); return; }
-    noLivesFlash = 60;
-    r3d.shake(3);
+    if (lv.norewind || lives <= 1) {
+      noLivesFlash = 60;
+      r3d.shake(3);
+    } else { startRewind(); return; }
   }
   if (noLivesFlash > 0) noLivesFlash--;
 
-  if (loopTick >= LOOP_TICKS) startRewind();
+  if (loopTick >= world.loopTicks) startRewind();
 }
 
 // ---------- drawing ----------
@@ -456,9 +627,11 @@ function draw() {
   ctx.clearRect(0, 0, W, H);
 
   if (state === 'title') drawTitle();
+  else if (state === 'cine') { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); return; }
   else if (state === 'map') drawMap();
   else if (state === 'vigil') drawVigil();
   else if (state === 'story') drawStory();
+  else if (state === 'night') { drawScene(); drawNightCard(); }
   else if (state === 'ending') drawEnding();
   else drawScene();
 
@@ -535,11 +708,12 @@ function drawScene() {
     ctx.fillText('\u27f2  ' + rewindLine, W / 2, H / 2 - 100);
   }
 
-  // husk epitaphs \u2014 the dead speak when you stand close enough to read them
+  // husk epitaphs \u2014 the dead speak when you stand close enough to read them.
+  // Door labels in the asking rooms ride the same whisper.
   let nearEpi = '';
   if (state === 'play') {
     const pcx = player.x + player.w / 2, pcy = player.y + player.h / 2;
-    for (const h of (world.def.husks || [])) {
+    for (const h of [...(world.def.husks || []), ...(world.def.labels || [])]) {
       const line = h[2];
       if (typeof line !== 'string') continue;
       const hx = Number(h[0]) * TILE + TILE / 2, hy = Number(h[1]) * TILE + TILE / 2;
@@ -639,7 +813,7 @@ function drawHud() {
   if (clawCount() > 0) {
     ctx.save();
     ctx.textAlign = 'right';
-    for (let i = 0; i < RELIC_LEVELS.length; i++) {
+    for (let i = 0; i < RELIC_IDS.length; i++) {
       const cx2 = W - 30 - i * 16, cy2 = 62;
       const have = i < clawCount();
       ctx.strokeStyle = have ? '#ffd8a0' : 'rgba(140,120,90,0.35)';
@@ -686,12 +860,22 @@ function drawLoopHud() {
     ctx.fillStyle = '#ff9f9f';
     ctx.font = '13px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('last life — no rewinds left', 22, 48);
+    ctx.fillText(LEVELS[levelIdx].norewind
+      ? 'the Loom is holding your echoes — no rewinds here'
+      : 'last life — no rewinds left', 22, 48);
+  }
+
+  // nights of the First Telling, counted under the lives
+  if (save.bells.length > 0) {
+    ctx.fillStyle = 'rgba(255,216,160,0.6)';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`nights ${save.bells.length}/8`, 22, 64);
   }
 
   // loop timer arc
-  const frac = loopTick / LOOP_TICKS;
-  const secLeft = Math.max(0, (LOOP_TICKS - loopTick) / 60);
+  const frac = loopTick / world.loopTicks;
+  const secLeft = Math.max(0, (world.loopTicks - loopTick) / 60);
   const urgent = secLeft < 3;
   ctx.save();
   ctx.strokeStyle = 'rgba(120,180,230,0.25)';
@@ -709,6 +893,49 @@ function drawLoopHud() {
   ctx.textAlign = 'center';
   ctx.fillText(secLeft.toFixed(0), W / 2, 34);
   ctx.restore();
+
+  // Death's metronome, beside the timer
+  const cnt = world.def.counting;
+  if (cnt) {
+    const m = loopTick % cnt.period;
+    const warn = m >= cnt.period - 30;
+    const k = m / cnt.period;
+    ctx.save();
+    ctx.strokeStyle = warn ? '#ff9f7f' : 'rgba(216,168,240,0.55)';
+    if (warn) { ctx.shadowColor = '#ff9f7f'; ctx.shadowBlur = 10; }
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(W / 2 + 44, 30, 9, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = warn ? '#ffcbb3' : 'rgba(216,168,240,0.7)';
+    ctx.beginPath();
+    ctx.arc(W / 2 + 44, 30, warn ? 3.5 : 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// a night of the First Telling, told over the paused chamber
+function drawNightCard() {
+  ctx.fillStyle = 'rgba(4,6,12,0.78)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,216,160,0.85)';
+  ctx.font = '15px Georgia, serif';
+  ctx.fillText(nightTitle.split('').join(' '), W / 2, 150);
+  ctx.strokeStyle = 'rgba(255,216,160,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - 130, 166);
+  ctx.lineTo(W / 2 + 130, 166);
+  ctx.stroke();
+  typewriterLines(nightLines, nightChars, 216, 36, '18px monospace', '#f2e3c8');
+  const total = nightLines.join('').length;
+  if (nightChars >= total) {
+    ctx.fillStyle = `rgba(255,225,180,${0.4 + Math.sin(globalT * 0.06) * 0.3})`;
+    ctx.font = '13px monospace';
+    ctx.fillText('ENTER', W / 2, H - 46);
+  }
 }
 
 function drawTitle() {
@@ -897,26 +1124,35 @@ function drawMap() {
   const hex = n => '#' + n.toString(16).padStart(6, '0');
 
   // corridors: passages bored through rock, not ruled lines — they leave a
-  // chamber at its wall, bow off the straight, and wander on the way over
-  for (let i = 1; i < LEVELS.length; i++) {
-    const ra = LEVELS[i - 1].atlas, rb = LEVELS[i].atlas;
-    const [ax, ay] = edgePoint(ra, rb[0] + rb[2] / 2, rb[1] + rb[3] / 2);
-    const [bx2, by2] = edgePoint(rb, ra[0] + ra[2] / 2, ra[1] + ra[3] / 2);
-    const open = i <= unlocked;
-    ctx.strokeStyle = open ? 'rgba(150,170,200,0.4)' : 'rgba(110,125,150,0.14)';
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash(open ? [] : [3, 5]);
-    for (const sgn of [1, -1]) {
-      corridorPath(ax, ay, bx2, by2, i, sgn);
-      ctx.stroke();
+  // chamber at its wall, bow off the straight, and wander on the way over.
+  // The descent is a graph now: a corridor per opened link.
+  for (const lv of LEVELS) {
+    if (lv.hidden) continue;
+    const targets = [...(lv.next || []), ...Object.values(lv.routes || {}).map(r => r.to)];
+    for (const tid of targets) {
+      const tv = BY_ID[tid];
+      if (!tv || tv.hidden) continue;
+      const ra = lv.atlas, rb = tv.atlas;
+      const [ax, ay] = edgePoint(ra, rb[0] + rb[2] / 2, rb[1] + rb[3] / 2);
+      const [bx2, by2] = edgePoint(rb, ra[0] + ra[2] / 2, ra[1] + ra[3] / 2);
+      const open = isOpen(tid) && isOpen(lv.id);
+      const seed = INDEX_OF[lv.id] * 3.1 + INDEX_OF[tid] * 1.7;
+      ctx.strokeStyle = open ? 'rgba(150,170,200,0.4)' : 'rgba(110,125,150,0.14)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash(open ? [] : [3, 5]);
+      for (const sgn of [1, -1]) {
+        corridorPath(ax, ay, bx2, by2, seed, sgn);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
     }
-    ctx.setLineDash([]);
   }
 
   LEVELS.forEach((lv, i) => {
+    if (lv.hidden) return;
     const [x, y, w, h] = lv.atlas;
-    const cleared = i < unlocked;
-    const locked = i > unlocked;
+    const cleared = save.cleared.includes(lv.id);
+    const locked = !isOpen(lv.id);
     const accent = MOODS[lv.mood].accent;
     const aHex = hex(accent);
 
@@ -1023,7 +1259,7 @@ function drawMap() {
 
     // claw shard pin
     if (lv.relic) {
-      const have = !!(claw & (1 << i));
+      const have = save.claw.includes(lv.id);
       ctx.save();
       ctx.strokeStyle = have ? '#ffd8a0' : locked ? 'rgba(140,120,90,0.3)' : 'rgba(230,190,130,0.55)';
       if (have) { ctx.shadowColor = '#ffc060'; ctx.shadowBlur = 5; }
@@ -1068,7 +1304,7 @@ function drawMap() {
     const lv = LEVELS[mapSel];
     const px3 = W - 20, py3 = 424;
     ctx.textAlign = 'right';
-    if (mapSel > unlocked) {
+    if (!isOpen(lv.id)) {
       ctx.fillStyle = 'rgba(150,170,195,0.45)';
       ctx.font = 'italic 12px Georgia, serif';
       ctx.fillText('unsurveyed', px3, py3 + 18);
@@ -1106,7 +1342,7 @@ function drawMap() {
       } else {
         ctx.fillStyle = 'rgba(150,170,195,0.42)';
         ctx.font = '10px monospace';
-        ctx.fillText(`chamber ${CHAMBER_NO[mapSel]} of ${CHAMBER_NO[LEVELS.length - 1]}`
+        ctx.fillText(`chamber ${CHAMBER_NO[mapSel]} of ${Math.max(...CHAMBER_NO)}`
           + (lv.relic ? '  \u00b7  a shard lies here' : ''), px3, py3 + 86);
       }
     }
@@ -1140,7 +1376,8 @@ function drawMap() {
   ctx.textAlign = 'left';
   ctx.fillStyle = 'rgba(150,170,195,0.5)';
   ctx.font = '11px monospace';
-  ctx.fillText('←→ choose · ENTER descend' + (isMuted() ? ' · M unmute' : ' · M mute'), 18, H - 14);
+  ctx.fillText('←→ choose · ENTER descend' + (isMuted() ? ' · M unmute' : ' · M mute')
+    + (save.bells.length ? ` · nights ${save.bells.length}/8` : ''), 18, H - 14);
   ctx.textAlign = 'center';
 }
 
@@ -1236,8 +1473,9 @@ function drawVigil() {
     const x0 = W / 2 + (i % 2 ? 1 : -1) * (100 + (i >> 1) * 78);
     const x = x0 + (W / 2 - x0) * k * 0.55;
     const y = H + 40 - k * H * 0.42 + Math.sin(globalT * 0.02 + i) * 4;
+    // dead that were tithed to the machine walk in on golden thread
     drawCat(ctx, x, y, x < W / 2 ? 1 : -1, globalT * 0.03 + i, 0,
-      { ghost: true, alpha: 0.45 * Math.min(1, k * 4), grounded: true });
+      { ghost: true, remote: !!save.flags.traded, alpha: 0.45 * Math.min(1, k * 4), grounded: true });
   }
 
   typewriterLines(NARRATOR.vigil, vigilChars, 118, 34, '18px monospace', '#dfeaff');

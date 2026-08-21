@@ -1,4 +1,5 @@
-// World: level parsing, tile/door/box collision, plates, spikes, exits.
+// World: level parsing, tile/door/box collision, plates, spikes, exits,
+// bells, memory tiles, water and Death's counting.
 // Everything here advances ONLY in fixed ticks — determinism is what makes
 // ghost replays exact, so no Date/random in simulation code.
 
@@ -9,14 +10,18 @@ export const LOOP_TICKS = LOOP_SECONDS * 60;
 export class World {
   constructor(def) {
     this.def = def;
+    this.loopTicks = (def.loopSeconds || LOOP_SECONDS) * 60;
     this.solidGrid = [];
     this.plates = [];
     this.doors = [];
     this.spikes = [];
     this.exits = [];
     this.boxSpawns = [];
+    this.bells = [];        // [{c, r, rung}] — rung this loop, in ring order
     this.relic = def.relic ? { c: def.relic[0], r: def.relic[1] } : null;
+    this.night = def.night ? { c: def.night.at[0], r: def.night.at[1], n: def.night.n } : null;
     this.spawn = { x: TILE, y: TILE };
+    this.waterNow = null;   // surface y in px this tick, set by tickBoxes(tick)
 
     const grid = def.grid;
     for (let r = 0; r < ROWS; r++) {
@@ -26,15 +31,24 @@ export class World {
         row.push(ch === '#');
         const x = c * TILE, y = r * TILE;
         if (ch === 'S') this.spawn = { x: x + 4, y: y + TILE - 26 };
-        else if (ch === 'E') this.exits.push({ c, r, kind: def.finale ? 'break' : 'next' });
-        else if (ch === 'O') this.exits.push({ c, r, kind: 'stay' });
+        else if (ch === 'E') this.exits.push({ c, r, ch, kind: def.endings ? 'break' : 'next' });
+        else if (ch === 'O') this.exits.push({ c, r, ch, kind: def.routes && def.routes.O ? 'next' : 'stay' });
+        else if (ch === 'N') this.exits.push({ c, r, ch, kind: 'release' });
         else if (ch === 'X') this.boxSpawns.push({ x, y });
         else if (ch === '^') this.spikes.push({ c, r });
+        else if (ch === 'g') this.bells.push({ c, r, rung: false });
         else if (ch >= 'a' && ch <= 'c') this.plates.push({ c, r, letter: ch, pressed: false, anim: 0 });
         else if (ch >= 'A' && ch <= 'C') this.doors.push({ c, r, letter: ch.toLowerCase(), open: 0, solidNow: true });
       }
       this.solidGrid.push(row);
     }
+    // exit kinds may be overridden by the level's routes (asking rooms, phases)
+    for (const e of this.exits) {
+      const route = def.routes && def.routes[e.ch];
+      if (route && route.kind) e.kind = route.kind;
+    }
+    // memory tiles come from the authored order, not the grid
+    this.memory = (def.memory || []).map(([c, r]) => ({ c, r, occ: false }));
     this.resetLoop();
   }
 
@@ -44,6 +58,43 @@ export class World {
     this.boxes = this.boxSpawns.map(s => ({ x: s.x, y: s.y, vy: 0, w: TILE, h: TILE }));
     for (const d of this.doors) { d.open = 0; d.solidNow = true; }
     for (const p of this.plates) { p.pressed = false; p.anim = 0; }
+    for (const b of this.bells) b.rung = false;
+    this.bellSeq = [];       // indices (grid reading order) in ring order
+    this.bellDone = false;   // latched: rung in the inscribed order
+    this.bellOcc = this.bells.map(() => false);
+    for (const m of this.memory) m.occ = false;
+    this.memIdx = 0;
+    this.memDone = false;
+  }
+
+  // water surface y in px at this tick, or null. Square wave of the loop:
+  // rows[1] (the low mark) first, rows[0] (the high) on the odd half-periods.
+  waterSurface(tick) {
+    const w = this.def.water;
+    if (!w) return null;
+    const row = (Math.floor(tick / w.period) % 2 === 0) ? w.rows[1] : w.rows[0];
+    return row * TILE;
+  }
+
+  inWater(a, headOnly = false) {
+    if (this.waterNow == null) return false;
+    const w = this.def.water;
+    if (w.cols) {
+      const c0 = w.cols[0] * TILE, c1 = (w.cols[1] + 1) * TILE;
+      if (a.x + a.w <= c0 || a.x >= c1) return false;
+    }
+    return (headOnly ? a.y : a.y + a.h) > this.waterNow;
+  }
+
+  // Death's counting — pure function of the loop tick.
+  // 'warn' during the wind-up, 'strike' on the count itself.
+  countPhase(tick) {
+    const c = this.def.counting;
+    if (!c) return null;
+    const m = tick % c.period;
+    if (tick > 0 && m === 0) return 'strike';
+    if (m >= c.period - 30) return 'warn';
+    return null;
   }
 
   tileSolid(c, r) {
@@ -83,7 +134,8 @@ export class World {
     return step;
   }
 
-  tickBoxes() {
+  tickBoxes(tick = 0) {
+    this.waterNow = this.waterSurface(tick);
     for (const b of this.boxes) {
       b.vy = Math.min(b.vy + 0.5, 10);
       let ny = b.y + b.vy;
@@ -145,7 +197,13 @@ export class World {
     return null;
   }
 
-  // Plates + doors evaluated after all actors moved. `actors` = alive actors.
+  overlapsTile(a, c, r) {
+    const x = c * TILE, y = r * TILE;
+    return a.x < x + TILE && a.x + a.w > x && a.y < y + TILE && a.y + a.h > y;
+  }
+
+  // Plates + doors + bells + memory, evaluated after all actors moved.
+  // `actors` = alive actors, in the fixed deterministic order.
   tickPlatesAndDoors(actors) {
     for (const p of this.plates) {
       const px = p.c * TILE + 3, py = p.r * TILE + 10, pw = TILE - 6, ph = TILE - 10;
@@ -157,17 +215,59 @@ export class World {
       p.pressed = hit;
       p.anim += ((hit ? 1 : 0) - p.anim) * 0.3;
     }
+
+    // bells: a ring is the edge of an actor entering the tile. Ringing out of
+    // the inscribed order un-rings everything; completing it latches the door.
+    if (this.bells.length && !this.bellDone) {
+      this.bells.forEach((b, i) => {
+        const occ = actors.some(a => this.overlapsTile(a, b.c, b.r));
+        if (occ && !this.bellOcc[i] && !b.rung) {
+          b.rung = true;
+          this.bellSeq.push(i);
+          const want = this.def.bellOrder;
+          if (want) {
+            const k = this.bellSeq.length - 1;
+            if (want[k] !== i) {
+              for (const bb of this.bells) bb.rung = false;
+              this.bellSeq = [];
+            } else if (this.bellSeq.length === want.length) this.bellDone = true;
+          }
+        }
+        this.bellOcc[i] = occ;
+      });
+    }
+
+    // memory tiles: step them in the authored order. A wrong later tile
+    // resets the sequence; revisiting an earlier one is forgiven.
+    if (this.memory.length && !this.memDone) {
+      this.memory.forEach((m, i) => {
+        const occ = actors.some(a => this.overlapsTile(a, m.c, m.r));
+        if (occ && !m.occ) {
+          if (i === this.memIdx) {
+            this.memIdx++;
+            if (this.memIdx >= this.memory.length) this.memDone = true;
+          } else if (i > this.memIdx) this.memIdx = 0;
+        }
+        m.occ = occ;
+      });
+    }
+
     for (const d of this.doors) {
       const platesOfLetter = this.plates.filter(p => p.letter === d.letter);
-      const wantOpen = platesOfLetter.length > 0 && platesOfLetter.every(p => p.pressed);
+      let wantOpen = platesOfLetter.length > 0 && platesOfLetter.every(p => p.pressed);
+      if (this.def.memory && d.letter === (this.def.memoryDoor || 'a') && this.memDone) wantOpen = true;
+      if (this.def.bellOrder && d.letter === (this.def.bellDoor || 'a') && this.bellDone) wantOpen = true;
       d.open += ((wantOpen ? 1 : 0) - d.open) * 0.18;
       d.open = Math.min(1, Math.max(0, d.open));
       let solid = d.open < 0.7;
       if (solid) {
-        // never crush: stay passable while something occupies the doorway
+        // never crush: stay passable while something occupies the doorway.
+        // The half-pixel margin keeps an actor walked flush against the door
+        // (whose edge can land on the boundary ± float dust) from counting
+        // as inside it.
         const x = d.c * TILE, y = d.r * TILE;
         for (const a of actors) {
-          if (a.x < x + TILE && a.x + a.w > x && a.y < y + TILE && a.y + a.h > y) { solid = false; break; }
+          if (a.x < x + TILE - 0.5 && a.x + a.w > x + 0.5 && a.y < y + TILE && a.y + a.h > y) { solid = false; break; }
         }
         if (solid && this.boxAt(x, y, TILE, TILE, null)) solid = false;
       }

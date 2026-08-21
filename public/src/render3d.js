@@ -28,6 +28,7 @@ let beamPool = [];
 let avatar = null;
 let bgMesh = null, silMeshes = [], ambLight = null, dirLight = null;
 let relicMesh = null;
+let bellMeshes = [], memMeshes = [], waterMesh = null, nightMesh = null;
 let curMood = MOODS.under;
 
 function silhouetteTexture(tint, alpha) {
@@ -372,7 +373,7 @@ export function buildLevel(world) {
   // --- exits: glowing arch + light ---
   for (const e of world.exits) {
     const warm = e.kind === 'stay';
-    const col = warm ? 0xffc87a : 0xeaffff;
+    const col = warm ? 0xffc87a : e.kind === 'release' ? 0xfff6e8 : 0xeaffff;
     const grp = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.9, roughness: 0.3 });
     const arc = new THREE.Mesh(new THREE.TorusGeometry(10, 1.6, 8, 20, Math.PI), mat);
@@ -421,6 +422,85 @@ export function buildLevel(world) {
     relicMesh.userData.light = rl;
     levelGroup.add(rl);
     levelGroup.add(relicMesh);
+  }
+
+  // bells — hung on threads, rung by touch
+  bellMeshes = [];
+  for (const b of world.bells) {
+    const grp = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xcaa860, emissive: 0xffd8a0, emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.6 });
+    const cup = new THREE.Mesh(new THREE.ConeGeometry(8, 12, 10, 1, true), mat);
+    cup.rotation.x = Math.PI;
+    grp.add(cup);
+    const clapper = new THREE.Mesh(new THREE.SphereGeometry(2.4, 8, 8), mat);
+    clapper.position.y = -8;
+    grp.add(clapper);
+    const thread = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.5, 80, 4),
+      new THREE.MeshBasicMaterial({ color: 0xffd8a0, transparent: true, opacity: 0.22 }));
+    thread.position.y = 46;
+    grp.add(thread);
+    grp.position.set(sx(b.c * TILE + TILE / 2), sy(b.r * TILE + TILE / 2), 4);
+    levelGroup.add(grp);
+    bellMeshes.push({ grp, mat });
+  }
+
+  // memory tiles — slabs that remember footsteps
+  memMeshes = [];
+  for (const mt of world.memory) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0xc880f0, emissive: 0xc880f0, emissiveIntensity: 0.15, roughness: 0.4, transparent: true, opacity: 0.9 });
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(TILE - 6, 4, 32), mat);
+    slab.position.set(sx(mt.c * TILE + TILE / 2), sy(mt.r * TILE + TILE - 3), 4);
+    levelGroup.add(slab);
+    memMeshes.push({ slab, mat });
+  }
+
+  // water — one long sheet whose surface obeys the loop
+  waterMesh = null;
+  if (world.def.water) {
+    const wdef = world.def.water;
+    const x0 = wdef.cols ? wdef.cols[0] * TILE : 0;
+    const x1 = wdef.cols ? (wdef.cols[1] + 1) * TILE : W;
+    waterMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(x1 - x0, H),
+      new THREE.MeshBasicMaterial({ color: curMood.accent, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
+    waterMesh.position.set(sx((x0 + x1) / 2), sy(H), 26);
+    levelGroup.add(waterMesh);
+  }
+
+  // a Night bell — one story of the First Telling, waiting to be rung
+  nightMesh = null;
+  if (world.night && !world.nightTaken) {
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 64;
+    const g2 = cv.getContext('2d');
+    g2.strokeStyle = '#ffe2a8';
+    g2.fillStyle = '#ffd8a0';
+    g2.lineWidth = 4;
+    g2.lineCap = 'round';
+    g2.shadowColor = '#ffc060';
+    g2.shadowBlur = 12;
+    g2.beginPath();
+    g2.moveTo(20, 40);
+    g2.quadraticCurveTo(20, 16, 32, 14);
+    g2.quadraticCurveTo(44, 16, 44, 40);
+    g2.closePath();
+    g2.stroke();
+    g2.beginPath();
+    g2.arc(32, 46, 4, 0, Math.PI * 2);
+    g2.fill();
+    const tex2 = new THREE.CanvasTexture(cv);
+    tex2.colorSpace = THREE.SRGBColorSpace;
+    nightMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(26, 26),
+      new THREE.MeshBasicMaterial({ map: tex2, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    nightMesh.position.set(sx(world.night.c * TILE + TILE / 2), sy(world.night.r * TILE + TILE / 2), 6);
+    const nl = new THREE.PointLight(0xffc060, 1800, 110);
+    nl.position.copy(nightMesh.position);
+    nl.position.z = 25;
+    nightMesh.userData.light = nl;
+    levelGroup.add(nl);
+    levelGroup.add(nightMesh);
   }
 
   // husks — petrified cats the Loom collected before you
@@ -522,6 +602,7 @@ export function buildLevel(world) {
 
 export function loomBreak() { if (loomGroup) { loomState = 1; loomT = 0; } }
 export function loomStay() { if (loomGroup) { loomState = 2; loomT = 0; } }
+export function loomRelease() { if (loomGroup) { loomState = 3; loomT = 0; } }
 
 function disposeGroup(g) {
   g.traverse(o => {
@@ -655,6 +736,44 @@ export function render(t, world, cats, playerX, playerY, loopTick = -1) {
     relicMesh.rotation.z = Math.sin(t * 0.03) * 0.3;
   }
 
+  // night bell bob; gone once its story is told
+  if (nightMesh) {
+    if (world.nightTaken) {
+      nightMesh.visible = false;
+      if (nightMesh.userData.light) nightMesh.userData.light.intensity = 0;
+    } else {
+      nightMesh.position.y += Math.sin(t * 0.06) * 0.12;
+      nightMesh.rotation.z = Math.sin(t * 0.04) * 0.2;
+    }
+  }
+
+  // bells swing a little; a rung bell burns brighter until the loop resets it
+  world.bells.forEach((b, i) => {
+    const bm = bellMeshes[i];
+    if (!bm) return;
+    bm.grp.rotation.z = Math.sin(t * 0.02 + i * 1.7) * 0.08;
+    bm.mat.emissiveIntensity = b.rung ? 1.4 : 0.35;
+  });
+
+  // memory tiles: the sequence is shown in the first seconds of every loop,
+  // then each remembered step stays lit
+  world.memory.forEach((mt, i) => {
+    const mm = memMeshes[i];
+    if (!mm) return;
+    const showing = loopTick >= 0 && loopTick >= i * 45 && loopTick < i * 45 + 45;
+    const kept = world.memDone || i < world.memIdx;
+    mm.mat.emissiveIntensity = kept ? 1.3 : showing ? 1.0 : 0.15;
+  });
+
+  // water follows its square wave
+  if (waterMesh) {
+    if (world.waterNow == null || world.waterNow >= H) waterMesh.visible = false;
+    else {
+      waterMesh.visible = true;
+      waterMesh.position.y = sy(world.waterNow + H / 2);
+    }
+  }
+
   // First Cat gaze beams
   if (beamPool.length) {
     let bi = 0;
@@ -690,7 +809,7 @@ export function render(t, world, cats, playerX, playerY, loopTick = -1) {
   // the Loom turns
   if (loomGroup) {
     loomT++;
-    const spin = loomState === 1 ? 1 + loomT * 0.12 : loomState === 2 ? 0.35 : 1;
+    const spin = loomState === 1 ? 1 + loomT * 0.12 : loomState === 2 ? 0.35 : loomState === 3 ? 0.12 : 1;
     loomRings.forEach(r => { r.rotateOnAxis(r.userData.axis, r.userData.speed * spin); });
     if (loomCore) loomCore.rotation.y += 0.01 * spin;
     if (loomState === 1) {
@@ -710,6 +829,14 @@ export function render(t, world, cats, playerX, playerY, loopTick = -1) {
       loomRings.forEach(r => { r.material.emissive.lerp(new THREE.Color(0xffc87a), 0.02); });
       if (loomCore) loomCore.material.emissive.lerp(new THREE.Color(0xffd9a0), 0.02);
       if (loomLight) loomLight.color.lerp(new THREE.Color(0xffc87a), 0.02);
+    } else if (loomState === 3) {
+      // release: the machine exhales — pale, slow, and quiet
+      loomRings.forEach(r => {
+        r.material.emissive.lerp(new THREE.Color(0xfff6e8), 0.03);
+        r.material.opacity = Math.max(0.15, (r.material.opacity ?? 1) - 0.004);
+      });
+      if (loomCore) loomCore.material.emissive.lerp(new THREE.Color(0xffffff), 0.03);
+      if (loomLight) { loomLight.color.lerp(new THREE.Color(0xfff6e8), 0.03); loomLight.intensity = Math.max(2000, loomLight.intensity * 0.98); }
     }
   }
 

@@ -56,17 +56,21 @@ function botMask(a, world, step, st) {
 class Fail extends Error {}
 
 // One loop of one chamber. `recs` are the recordings of the earlier runs.
+const swapLR = m => ((m & L) ? R : 0) | ((m & R) ? L : 0) | (m & J);
+
 function playRun(def, recs, run, label) {
   const steps = Array.isArray(run) ? run : run.steps;
   const sacrificial = !Array.isArray(run) && !!run.sacrificial;
   const world = new World(def);
+  const COLSPX = 32 * TILE;
   const ghostActors = recs.map(() => new Actor(world, true));
+  if (def.mirror) for (const a of ghostActors) a.x = COLSPX - world.spawn.x - a.w;
   const player = new Actor(world);
-  const rec = new Uint8Array(LOOP_TICKS);
+  const rec = new Uint8Array(world.loopTicks);
   const st = { stepT: 0, face: 0, jump: false };
   let tick = 0, si = 0, exit = null;
 
-  while (tick < LOOP_TICKS) {
+  while (tick < world.loopTicks) {
     while (si < steps.length && stepDone(player, steps[si], st, tick)) {
       if (steps[si].face !== undefined) st.face = steps[si].face;
       si++; st.stepT = 0;
@@ -77,19 +81,24 @@ function playRun(def, recs, run, label) {
       throw new Fail(`${label} step ${si} ${JSON.stringify(step)} stalled at ` +
         `x=${player.x.toFixed(1)} y=${player.y.toFixed(1)} tick=${tick}`);
 
-    const mask = botMask(player, world, step, st);
+    let mask = botMask(player, world, step, st);
+    // Death's counting: the bot goes still on the count, like any sane cat
+    const beat = world.countPhase(tick) === 'strike';
+    if (def.counting && (tick % def.counting.period === 0) && tick > 0) mask = 0;
     rec[tick] = mask;
     st.stepT++;
 
     // ---- tick order, identical to tickPlay() ----
-    world.tickBoxes();
+    world.tickBoxes(tick);
     const alive = [];
     ghostActors.forEach((a, i) => {
       if (!a.alive) { a.tick(0); return; }
       a.frozen = tick >= recs[i].length;
-      a.tick(a.frozen ? 0 : recs[i][tick]);
+      const gm = a.frozen ? 0 : (def.mirror ? swapLR(recs[i][tick]) : recs[i][tick]);
+      a.tick(gm);
       if (world.hitsBeam(a, tick)) a.die();
       if (a.alive && !a.frozen && world.hitsSpike(a)) a.die();
+      if (a.alive && !a.frozen && beat && recs[i][tick] !== 0) a.die();
       if (a.alive) alive.push(a);
     });
     player.tick(player.alive ? mask : 0);
@@ -97,7 +106,11 @@ function playRun(def, recs, run, label) {
     world.tickPlatesAndDoors(alive);
     if (player.alive && world.hitsBeam(player, tick)) player.die();
     if (player.alive && world.hitsSpike(player)) player.die();
-    if (player.alive) exit = world.exitHit(player);
+    if (player.alive && beat && mask !== 0) player.die();
+    if (player.alive) {
+      const e = world.exitHit(player);
+      if (e && e.kind !== 'release') exit = e;   // the ninth door does not open to touch
+    }
     tick++;
     // --------------------------------------------
 
@@ -109,8 +122,8 @@ function playRun(def, recs, run, label) {
   }
 
   if (!exit && si < steps.length && player.alive)
-    throw new Fail(`${label} ran out of loop (${LOOP_TICKS} ticks) on step ${si}`);
-  return { rec: rec.slice(0, tick), ticks: tick, exit, alive: player.alive };
+    throw new Fail(`${label} ran out of loop (${world.loopTicks} ticks) on step ${si}`);
+  return { rec: rec.slice(0, tick), ticks: tick, exit, alive: player.alive, loop: world.loopTicks };
 }
 
 function proveLevel(def) {
@@ -126,7 +139,7 @@ function proveLevel(def) {
   if (!last.exit) throw new Fail(`${def.name}: final run never reached an exit`);
   if (last.exit.kind === 'stay') throw new Fail(`${def.name}: final run took the 'stay' exit`);
   if (!last.alive) throw new Fail(`${def.name}: player was dead at the exit`);
-  return { runs: sol.length, ticks: last.ticks, kind: last.exit.kind };
+  return { runs: sol.length, ticks: last.ticks, kind: last.exit.kind, loop: last.loop };
 }
 
 let failed = 0;
@@ -134,7 +147,7 @@ console.log('THE NINTH ECHO — solvability proof\n');
 for (const def of LEVELS) {
   try {
     const r = proveLevel(def);
-    console.log(`  ${def.name.padEnd(16)} runs ${String(r.runs).padStart(2)}/${LIVES}   final run ${String(r.ticks).padStart(3)}/${LOOP_TICKS} ticks   CLEAR (${r.kind})`);
+    console.log(`  ${def.name.padEnd(18)} runs ${String(r.runs).padStart(2)}/${LIVES}   final run ${String(r.ticks).padStart(4)}/${r.loop} ticks   CLEAR (${r.kind})`);
   } catch (e) {
     failed++;
     console.log(`  ${def.name.padEnd(16)} FAILED — ${e instanceof Fail ? e.message : e.stack}`);

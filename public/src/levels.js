@@ -2,9 +2,10 @@
 // Grid: 32 x 18 tiles, 30px each (960x540).
 // Legend:
 //   #  wall          .  empty         S  player start
-//   E  exit (break-the-loop exit in finale)
-//   O  stay exit (finale only)
-//   ^  spikes        X  box
+//   E  exit          O  stay exit / second route door
+//   N  the ninth door (finale only — opens to stillness, not touch)
+//   ^  spikes        X  box           g  bell (rung by touch)
+//   m  memory tile (step them in the authored order)
 //   a b c  pressure plates    A B C  doors (letter-linked, ALL plates of
 //   that letter must be held for the door to open)
 
@@ -15,7 +16,7 @@ export const LOOP_SECONDS = 15;
 export const LIVES = 9;
 // bump when level data changes; stale ghosts are filtered out. Shared by the
 // client (net.js) and the server, which imports this module directly.
-export const GAME_VERSION = 5;
+export const GAME_VERSION = 6;
 
 // biome palettes — whole screen re-dresses per region
 export const MOODS = {
@@ -41,23 +42,40 @@ export const MOODS = {
   },
 };
 
-// `atlas` is the chamber's [x, y, w, h] room rect on the map; the atlas links
-// them in list order. Narrative fields: canto / title / region label each
-// chapter. In `story`,
-// husk epitaphs and shard lines, a line that is entirely UPPERCASE renders
-// gold as the Loom's voice; anything else is the narrator (the First Cat).
+// The descent is a graph now, not a list. Each level has an `id` and `next`
+// (the ids its clear opens). Asking rooms are `exclusive`: only the exit you
+// actually walk through opens, and `routes` maps the exit letter to where it
+// leads and which flag it writes. `hidden` rooms (boss phases) never appear
+// on the atlas — they are entered only by `kind: 'phase'` exits.
 //
-// `interlude: true` marks a passage rather than a chamber: a traversal-only
-// shaft at a biome boundary, with no canto, no chamber number, no leaderboard
-// and a quiet HUD. Its atlas rect is tall and thin and draws as a throat.
+// `atlas` is the chamber's [x, y, w, h] room rect on the map; corridors are
+// drawn from the graph. Narrative fields: canto / title / region label each
+// chapter. In `story`, husk epitaphs and shard lines, a line that is entirely
+// UPPERCASE renders gold as the Loom's voice; anything else is the narrator
+// (the First Cat).
+//
+// `interlude: true` marks a passage rather than a chamber. `night: {n, at}`
+// is a Night bell — touch it once and one night of the First Telling is told
+// (see NIGHTS below). `memory: [[c,r]..]` is the tile order for `m` rooms,
+// opened via door letter `memoryDoor`. `bellOrder` indexes the grid's `g`
+// bells (reading order) into the required ring order for door `bellDoor`.
+// `water: {rows:[hi,lo], period, cols}` floods below the surface row on a
+// square wave of the loop tick. `counting: {period}` is Death's arithmetic:
+// any actor whose input mask is nonzero on a count tick is struck.
+// `mirror: true` replays every echo x-reflected with L/R swapped.
+// `norewind: true` refuses R (the Loom is holding your echoes).
+// `loopSeconds` overrides the loop length for this chamber alone.
 export const LEVELS = [
   {
+    id: 'wake',
     name: 'WAKE',
     canto: 'CANTO I',
     title: 'The Cold Tiles',
     region: 'the rain-blue under-halls',
+    next: ['nine'],
     relic: [28, 7],
     shard: 'A claw-shard. The First Cat cut nine lives from one.',
+    night: { n: 1, at: [8, 16] },
     mood: 'under',
     story: [
       'This story has been told nine times.',
@@ -66,7 +84,7 @@ export const LEVELS = [
       'Below you, something was already turning.',
     ],
     hint: '← → move · ↑ jump',
-    atlas: [58, 92, 76, 40],
+    atlas: [36, 96, 60, 32],
     grid: [
       '################################',
       '#..............................#',
@@ -89,10 +107,12 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'nine',
     name: 'NINE',
     canto: 'CANTO II',
     title: 'How to Count to Nine',
     region: 'the rain-blue under-halls',
+    next: ['echo'],
     relic: [29, 7],
     shard: 'It gave all nine away and kept none for itself.',
     mood: 'under',
@@ -107,7 +127,7 @@ export const LEVELS = [
       'The floor below had been counting a long time.',
     ],
     hint: 'Drop from ledge to ledge. Spikes spend a life, and you have nine.',
-    atlas: [164, 122, 76, 40],
+    atlas: [112, 120, 60, 32],
     // a descent: four shelves stepping down left-right-left, each with a spiked
     // gap. The pocket behind the spikes on the right shelf is a dead end that
     // holds the claw shard.
@@ -133,10 +153,12 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'echo',
     name: 'ECHO',
     canto: 'CANTO III',
     title: 'What Stays Behind',
     region: 'the rain-blue under-halls',
+    next: ['asking1', 'hush'],
     mood: 'under',
     story: [
       'In the old tale a cat spends a life and walks on.',
@@ -145,7 +167,7 @@ export const LEVELS = [
       'It cannot do otherwise. Neither, yet, could you.',
     ],
     hint: 'Climb to the plate, then press R. Your echo holds it while you take the low road.',
-    atlas: [270, 96, 76, 40],
+    atlas: [188, 92, 60, 32],
     // the plate sits three ledges up the left wall; the door it opens is on the
     // floor the climb leaves behind, and the exit is two ledges up beyond it.
     grid: [
@@ -170,11 +192,104 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'hush',
+    name: 'HUSH',
+    canto: 'CANTO III½',
+    title: 'The Small Obedience',
+    region: 'a fold in the under-halls',
+    next: ['asking1'],
+    mood: 'under',
+    night: { n: 2, at: [4, 11] },
+    memory: [[6, 15], [12, 15], [18, 15], [25, 11]],
+    memoryDoor: 'a',
+    husks: [
+      [22, 15, 'TANSY. Stepped true four times, and hurried the fifth.'],
+    ],
+    story: [
+      'A room that remembered footsteps, and asked for them back.',
+      'Step where the light stepped. It is a small obedience.',
+      'The Loom does not watch here. That is what worries me.',
+    ],
+    hint: 'step the tiles in the order they glowed',
+    atlas: [140, 46, 50, 26],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#........................m.....#',
+      '#..####................#####...#',
+      '#...........................A..#',
+      '#.......##..........##......A..#',
+      '#.S...m.....m.....m.........A.E#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'asking1',
+    name: 'THE ASKING',
+    canto: 'THE FIRST ASKING',
+    title: 'Who Was the Story For?',
+    region: 'a doorway between the tellings',
+    mood: 'deep',
+    interlude: true,
+    exclusive: true,
+    cine: 'asking1',
+    next: [],
+    routes: {
+      E: { to: 'drop', set: { heard: 'child' } },
+      O: { to: 'toll', set: { heard: 'mother' } },
+    },
+    labels: [
+      [2, 15, 'for the child — the flood road'],
+      [29, 15, 'for the mother — the toll road'],
+    ],
+    story: [
+      'YOU HAVE HEARD THE START OF IT. TELL ME, LITTLE GHOST —',
+      'WHO WAS THE STORY FOR? THE ONE WHO LEFT,',
+      'OR THE ONE WHO STAYED BEHIND TO WIND THE CLOCK?',
+      'Choose a door. I will tell it the way you choose.',
+    ],
+    hint: 'walk through the door you choose. it will not ask twice.',
+    atlas: [268, 120, 44, 30],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.E...........S..............O.#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'drop',
     name: 'THE DROP',
     title: 'A Way Down',
-    region: 'the way into the bone archive',
+    region: 'the flood road into the bone archive',
+    next: ['font'],
     mood: 'bone',
     interlude: true,
+    cine: 'flood',
     husks: [
       [13, 5, 'FERN. Went down easy, and never once looked up.'],
     ],
@@ -183,9 +298,7 @@ export const LEVELS = [
       'Let yourself down, little one. I will keep telling it.',
     ],
     hint: 'nothing here but the way down',
-    atlas: [368, 106, 18, 108],
-    // three shelves stepping down and to the side, then a five-wide throat that
-    // spits you out into a low sepia hall.
+    atlas: [282, 166, 16, 60],
     grid: [
       '################################',
       '#....S.........................#',
@@ -208,10 +321,135 @@ export const LEVELS = [
     ],
   },
   {
-    name: 'CHAIN',
+    id: 'font',
+    name: 'FONT',
     canto: 'CANTO IV',
+    title: 'What the Water Wanted',
+    region: 'the drowned shelf of the bone archive',
+    next: ['chain'],
+    mood: 'bone',
+    night: { n: 3, at: [15, 15] },
+    water: { rows: [9, 16], period: 450 },
+    husks: [
+      [5, 15, 'DABBLE. Hated water all nine times.'],
+    ],
+    story: [
+      'The water rose on a schedule, like everything down here.',
+      'THE FLOOD IS NOT MINE, LITTLE GHOST. IT IS ONLY INVITED.',
+      'Run the low road while it is low. Do not stop to be brave.',
+    ],
+    hint: 'the tunnel floods on the half-loop — cross while it is dry',
+    atlas: [220, 242, 58, 32],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.S............................#',
+      '#####..........................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#........##############........#',
+      '#..............................#',
+      '#..............................#',
+      '#............................E.#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'toll',
+    name: 'THE TOLL',
+    title: 'A Corridor of Bells',
+    region: 'the toll road into the bone archive',
+    next: ['knell'],
+    mood: 'bone',
+    interlude: true,
+    cine: 'toll',
+    husks: [
+      [25, 15, 'PEAL. Rang every bell but her own.'],
+    ],
+    story: [
+      'A corridor of bells, each one a night somebody bought.',
+      'Walk soft. They remember what rang them.',
+    ],
+    hint: 'the bells ring for you, not against you',
+    atlas: [330, 166, 16, 60],
+    grid: [
+      '################################',
+      '#....S.........................#',
+      '#########......................#',
+      '#..............................#',
+      '#...........g..................#',
+      '#......#############...........#',
+      '#..............................#',
+      '#.....................g........#',
+      '#..............................#',
+      '#...................############',
+      '###############.....############',
+      '###############.....############',
+      '###############.....############',
+      '#..............................#',
+      '#..............g...............#',
+      '#.........E....................#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'knell',
+    name: 'KNELL',
+    canto: 'CANTO IV',
+    title: 'The Order of the Bells',
+    region: 'the belfry of the bone archive',
+    next: ['chain'],
+    mood: 'bone',
+    night: { n: 3, at: [20, 15] },
+    bellOrder: [1, 2, 0],
+    bellDoor: 'a',
+    husks: [
+      [8, 15, 'CHIME. Counted the order right, and the loop wrong.'],
+    ],
+    story: [
+      'Three bells, and an order carved under the rust:',
+      'first the low, then the far, then the high.',
+      'RING THEM WRONG AND I WILL TELL YOU NOTHING.',
+      'It lied. It always tells. It cannot help itself.',
+    ],
+    hint: 'ring low, far, high — an echo can hold your first two notes',
+    atlas: [368, 242, 58, 32],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#....................g.........#',
+      '#.................######.......#',
+      '#..............................#',
+      '#.........................##...#',
+      '#...g..........................#',
+      '#..####.................##.....#',
+      '#............................A.#',
+      '#.......##............##.....A.#',
+      '#.S.....##....g..............AE#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'chain',
+    name: 'CHAIN',
+    canto: 'CANTO V',
     title: 'The Ledger of Bone',
     region: 'the bone archive',
+    next: ['weight'],
     mood: 'bone',
     husks: [
       [10, 16, 'PIP. Held a door for a sister who never came.'],
@@ -224,7 +462,7 @@ export const LEVELS = [
       'They had names once. The ledger keeps those too.',
     ],
     hint: 'Two doors — one down here, one up there. Chain an echo to each.',
-    atlas: [424, 200, 78, 42],
+    atlas: [296, 292, 60, 32],
     // Two stacked halls. Plate a and door A are on the entry plinth below; the
     // gallery at row 12 is both that hall's ceiling and the upper floor, reached
     // only by the chimney in the gap at cols 14-17. Plate b and door B are up there.
@@ -250,10 +488,12 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'weight',
     name: 'WEIGHT',
-    canto: 'CANTO V',
+    canto: 'CANTO VI',
     title: 'What the Humans Brought',
     region: 'the bone archive',
+    next: ['sacrifice', 'larder'],
     mood: 'bone',
     story: [
       'The crates were theirs. They came down to copy a trick:',
@@ -262,7 +502,7 @@ export const LEVELS = [
       'Then the door above rusted shut, and no one came back.',
     ],
     hint: 'Boxes press plates. Boxes make stairs.',
-    atlas: [532, 232, 78, 42],
+    atlas: [378, 330, 58, 32],
     grid: [
       '################################',
       '#...................#..........#',
@@ -285,10 +525,53 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'larder',
+    name: 'LARDER',
+    canto: 'CANTO VI½',
+    title: 'Kept Badly',
+    region: 'a storeroom off the archive',
+    next: ['sacrifice'],
+    mood: 'bone',
+    night: { n: 4, at: [29, 15] },
+    warden: true,
+    beams: [{ cols: [16, 17], times: [150, 450, 750] }],
+    husks: [
+      [3, 15, 'SUET. Guarded the crates from no one, forever.'],
+    ],
+    story: [
+      'They stored their crates here, and their courage.',
+      'Both kept badly. The warden kept better.',
+    ],
+    hint: 'boxes still press plates. the gaze still burns.',
+    atlas: [452, 296, 52, 28],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#...................#.....A....#',
+      '#...................#.....A....#',
+      '#.S...X.......X.....#.....A..gE#',
+      '##########a.####################',
+      '################################',
+    ],
+  },
+  {
+    id: 'sacrifice',
     name: 'SACRIFICE',
-    canto: 'CANTO VI',
+    canto: 'CANTO VII',
     title: 'The Debt That Was Not',
     region: 'the bone archive',
+    next: ['asking2'],
     mood: 'bone',
     husks: [
       [7, 12, 'GRIST. Fell nine times so the next cat would not.'],
@@ -303,7 +586,7 @@ export const LEVELS = [
     hint: 'The plate is down there. A life must stay behind. Aim true.',
     warden: true,
     beams: [{ cols: [17, 18], times: [200, 500, 800] }],
-    atlas: [640, 198, 80, 44],
+    atlas: [458, 368, 62, 32],
     grid: [
       '################################',
       '#.....................#........#',
@@ -326,9 +609,139 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'asking2',
+    name: 'THE SECOND ASKING',
+    canto: 'THE SECOND ASKING',
+    title: 'The Weight of the Dead',
+    region: 'a doorway between the tellings',
+    mood: 'deep',
+    interlude: true,
+    exclusive: true,
+    cine: 'theft',
+    next: [],
+    routes: {
+      E: { to: 'tithe', set: { traded: true } },
+      O: { to: 'longway', set: { traded: false } },
+    },
+    labels: [
+      [2, 15, 'the tithe — give them, and go light'],
+      [29, 15, 'the long way — keep them, and carry'],
+    ],
+    story: [
+      'YOUR DEAD ARE HEAVY, LITTLE GHOST. GIVE THEM TO ME.',
+      'I WILL CARRY THEM, AND YOU WILL HAVE YOUR ENDING EARLY.',
+      'It is not a kindness. It is a wage.',
+    ],
+    hint: 'walk through the door you choose. it will not ask twice.',
+    atlas: [544, 330, 44, 30],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.E...........S..............O.#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'tithe',
+    name: 'THE TITHE',
+    canto: 'CANTO VIII',
+    title: 'Paid, and Not Thanked',
+    region: 'the deep loom, above the seam',
+    next: ['seam'],
+    mood: 'deep',
+    norewind: true,
+    cine: 'tithe',
+    husks: [
+      [26, 15, 'LENT. Paid early, and was not thanked.'],
+    ],
+    story: [
+      'You gave it your dead, and it took them gently.',
+      'GENTLY, LITTLE GHOST. I AM NOT WITHOUT MANNERS.',
+      'The room ahead you walk alone. That was the price.',
+    ],
+    hint: 'no rewinds here — the Loom is holding your echoes',
+    atlas: [606, 296, 52, 26],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.....................A........#',
+      '#.....................A........#',
+      '#.S....X..............A......E.#',
+      '#########a.####^^###############',
+      '################################',
+    ],
+  },
+  {
+    id: 'longway',
+    name: 'THE LONG WAY',
+    canto: 'CANTO VIII',
+    title: 'Five Doors of Weight',
+    region: 'the deep loom, above the seam',
+    next: ['seam'],
+    mood: 'deep',
+    cine: 'kept',
+    husks: [
+      [17, 15, 'FURROW. Held the fifth door for someone still coming.'],
+    ],
+    story: [
+      'You kept your dead, and the long way kept its word.',
+      'Five doors of weight, and every one of them yours to hold.',
+      'It was slower. It was heavier. It was yours.',
+    ],
+    hint: 'five seals, one door. spend the lives. mourn them after.',
+    atlas: [606, 362, 52, 26],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.........a.........a..........#',
+      '#........#####...#####.........#',
+      '#..........................A...#',
+      '#.....##.......##..........A...#',
+      '#.S..a.........a.....X.....A.E.#',
+      '#######################a.#######',
+      '################################',
+    ],
+  },
+  {
+    id: 'seam',
     name: 'THE SEAM',
     title: 'Where the Stone Splits',
     region: 'the way into the root-depths',
+    next: ['ascent'],
     mood: 'root',
     interlude: true,
     husks: [
@@ -339,9 +752,7 @@ export const LEVELS = [
       'Nothing wants you yet. Take the long step down.',
     ],
     hint: 'the stone smells of water now',
-    atlas: [712, 266, 18, 112],
-    // the archive cracks open: shelves stepping down to the left, a narrow split
-    // in the rock, then a wide low room breathing teal.
+    atlas: [672, 326, 16, 66],
     grid: [
       '################################',
       '#.........................S....#',
@@ -364,10 +775,12 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'ascent',
     name: 'ASCENT',
-    canto: 'CANTO VII',
+    canto: 'CANTO IX',
     title: 'Toward the Hum',
     region: 'the root-depths',
+    next: ['convoy', 'shallows'],
     mood: 'root',
     story: [
       'You climbed. The hum grew warmer, and less kind.',
@@ -376,7 +789,7 @@ export const LEVELS = [
       'It was a long time ago. It was still up there.',
     ],
     hint: 'Send an echo to the plate below. Then climb.',
-    atlas: [592, 330, 78, 42],
+    atlas: [560, 412, 56, 30],
     grid: [
       '################################',
       '#..............................#',
@@ -399,10 +812,52 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'shallows',
+    name: 'SHALLOWS',
+    canto: 'CANTO IX½',
+    title: 'Deep Enough',
+    region: 'a still pool in the root-depths',
+    next: ['convoy'],
+    mood: 'root',
+    night: { n: 5, at: [4, 15] },
+    water: { rows: [13, 13], period: 900, cols: [10, 20] },
+    husks: [
+      [26, 15, 'DIPPER. Held her breath one bell too long.'],
+    ],
+    story: [
+      'The pool was shallow the way promises are shallow.',
+      'Deep enough, in the end, for a small cat to stay under.',
+    ],
+    hint: 'the plate is under the water. a life can hold its breath — briefly.',
+    atlas: [608, 456, 50, 24],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.......................A......#',
+      '#.......................A......#',
+      '#.S............a........A....E.#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'convoy',
     name: 'CONVOY',
-    canto: 'CANTO VIII',
+    canto: 'CANTO X',
     title: 'The Mourning March',
     region: 'the root-depths',
+    next: ['otherside'],
     mood: 'root',
     husks: [
       [9, 16, 'ASH. Walked her own dead through three doors.'],
@@ -415,7 +870,7 @@ export const LEVELS = [
       'You did not use them. You mourned them, and walked on.',
     ],
     hint: 'Three doors up the switchback. March three echoes through in order.',
-    atlas: [478, 360, 78, 42],
+    atlas: [488, 448, 56, 30],
     // A switchback: door A gates the bottom leg (left to right), the stair at
     // cols 22-30 lifts you onto the middle shelf, door B gates that leg back
     // right to left, the blocks at cols 1-5 lift you again, and door C gates the
@@ -442,10 +897,53 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'otherside',
+    name: 'OTHER-SIDE',
+    canto: 'CANTO XI',
+    title: 'Past the Glass',
+    region: 'the root-depths, mirrored',
+    next: ['paradox'],
+    mood: 'root',
+    mirror: true,
+    night: { n: 6, at: [20, 15] },
+    husks: [
+      [11, 15, 'GLASS. Waved at herself, and neither one waved first.'],
+    ],
+    story: [
+      'Past the glass the room repeated itself, patiently.',
+      'Your spent life walks it backwards, left where you went right.',
+      'THE MIRROR IS HONEST, LITTLE GHOST. IT SHOWS WHAT YOU SPEND.',
+    ],
+    hint: 'your echo returns mirrored — walk right so it walks left',
+    atlas: [402, 410, 56, 30],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#....##...............A..##....#',
+      '#.....................A........#',
+      '#a..............S.....A......E.#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'paradox',
     name: 'PARADOX',
-    canto: 'CANTO IX',
+    canto: 'CANTO XII',
     title: 'The One Who Counted First',
     region: 'the deep loom',
+    next: ['counting', 'spindle'],
     relic: [19, 13],
     shard: 'The Claw is whole. What it made, it can also cut.',
     mood: 'deep',
@@ -461,7 +959,7 @@ export const LEVELS = [
     hint: 'One holds the door. One builds the path. Stay out of their way.',
     warden: true,
     beams: [{ cols: [11, 12], times: [150, 450, 750] }],
-    atlas: [360, 332, 84, 46],
+    atlas: [316, 444, 60, 30],
     grid: [
       '################################',
       '#..............................#',
@@ -484,9 +982,96 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'spindle',
+    name: 'SPINDLE',
+    canto: 'CANTO XII½',
+    title: 'The Winding Motion',
+    region: 'where the eight nights were wound away',
+    next: ['counting'],
+    mood: 'deep',
+    night: { n: 8, at: [4, 11] },
+    memory: [[6, 15], [14, 15], [22, 15]],
+    memoryDoor: 'a',
+    warden: true,
+    beams: [{ cols: [17, 18], times: [200, 500, 800] }],
+    husks: [
+      [11, 15, 'SPOOL. Watched the winding until she wound down.'],
+    ],
+    story: [
+      'The spindle room, where the eight nights were wound away.',
+      'The thread is gone. The winding motion is still here,',
+      'going through the shapes of what it stole.',
+    ],
+    hint: 'step the tiles in order. the gaze keeps its own time.',
+    atlas: [262, 398, 52, 26],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..####........................#',
+      '#...........................A..#',
+      '#.......##..................A..#',
+      '#.S...m.......m.......m.....A.E#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'counting',
+    name: 'THE COUNTING ROOM',
+    canto: 'CANTO XIII',
+    title: 'The Arithmetic',
+    region: 'the deep loom',
+    next: ['vein'],
+    mood: 'deep',
+    counting: { period: 120 },
+    night: { n: 7, at: [16, 15] },
+    husks: [
+      [6, 15, 'TICK. Moved on the count, once.'],
+    ],
+    story: [
+      'Here Death still practised its arithmetic.',
+      'On the beat, be nothing. Between the beats, be quick.',
+      'EVERYTHING THAT MOVES ON THE COUNT IS COUNTED.',
+    ],
+    hint: 'freeze on the count. move between.',
+    atlas: [200, 466, 56, 28],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.S..........................E.#',
+      '##########^^########^^##########',
+      '################################',
+    ],
+  },
+  {
+    id: 'vein',
     name: 'THE VEIN',
     title: 'The Warm Dark',
     region: 'the way into the ember heart',
+    next: ['nursery'],
     mood: 'heart',
     interlude: true,
     husks: [
@@ -497,9 +1082,7 @@ export const LEVELS = [
       'Nine tellings I have brought a cat this far. Go slowly.',
     ],
     hint: 'the hum is under your paws',
-    atlas: [312, 350, 18, 104],
-    // one long plunge past ledges you never touch, onto a shelf of rock, then a
-    // second drop through the vein into the ember hall.
+    atlas: [150, 434, 16, 60],
     grid: [
       '################################',
       '#..S...........................#',
@@ -522,22 +1105,73 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'nursery',
+    name: 'THE NURSERY',
+    canto: 'THE MOTHER',
+    title: 'What the Machine Is',
+    region: 'the heart of the loom',
+    next: ['ninth1'],
+    mood: 'heart',
+    interlude: true,
+    cine: 'nursery',
+    chair: [16, 15],
+    labels: [
+      [16, 15, 'the chair is still warm — be still, or walk on'],
+    ],
+    husks: [
+      [22, 15, 'LULL. Fell asleep on watch, and was allowed.'],
+    ],
+    story: [
+      'It was warm from here down. That is not kindness. You knew.',
+      'Then the loom opened, and it was not a heart. It was a room.',
+      'A crib, strung to every thread. A chair, still rocking.',
+      '"stay," said the machine, with a voice it did not invent.',
+    ],
+    hint: 'be still a while in the chair, or walk on',
+    atlas: [84, 470, 54, 26],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.S.........................E..#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'ninth1',
     name: 'THE NINTH LIFE',
     canto: 'THE LAST CANTO',
     title: 'The Face It Wears',
     region: 'the ember heart',
+    next: [],
+    routes: { E: { to: 'ninth2', kind: 'phase' } },
     mood: 'heart',
+    vigilBefore: true,
+    cine: 'face',
     husks: [
       [28, 16, 'NIM. Came this far with one life left. Stayed.'],
     ],
     story: [
       'The heart of the Loom looked up, and it was my face.',
       'It had waited nine tellings for this one.',
-      'Hold the three seals through its gaze and end it,',
-      'or take the warm door, lie down, and stay.',
+      'Hold the three seals through its gaze and pass,',
+      'or take the warm door now, lie down, and stay.',
     ],
     hint: 'Three seals, held together, open the way. Its gaze burns the floor.',
-    atlas: [176, 428, 110, 52],
+    atlas: [8, 428, 72, 38],
     finale: true,
     // the First Cat's gaze: deterministic beam strikes (warn 50 ticks, lethal 50..95).
     // Two of the three seals stand under it — cols 13 and 17 — so an echo left on
@@ -569,7 +1203,101 @@ export const LEVELS = [
       '################################',
     ],
   },
+  {
+    id: 'ninth2',
+    name: 'THE SHUTTLE',
+    canto: 'THE LAST CANTO · II',
+    title: 'It Began to Weave Faster',
+    region: 'the ember heart',
+    next: [],
+    routes: { E: { to: 'ninth3', kind: 'phase' } },
+    mood: 'heart',
+    hidden: true,
+    finale: true,
+    counting: { period: 120 },
+    beams: [{ cols: [13, 14], times: [100, 400, 700] }],
+    husks: [
+      [4, 15, 'HASTE. Reached the ninth door still running.'],
+    ],
+    story: [
+      'EIGHT DINGS. I COUNT EIGHT. WHERE IS MY NINTH?',
+      'It began to weave faster. It was afraid.',
+      'Hold the seals through the counting and the gaze at once.',
+      'It has never been asked to hold a night open this long.',
+    ],
+    hint: 'two seals through gaze and count alike — then the door',
+    atlas: [0, 0, 10, 10],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#.........................A....#',
+      '#.........................A....#',
+      '#.S....a.............a....A..E.#',
+      '################################',
+      '################################',
+    ],
+  },
+  {
+    id: 'ninth3',
+    name: 'THE NINTH DOOR',
+    canto: 'THE LAST CANTO · III',
+    title: 'It Opens Both Ways',
+    region: "the child's room",
+    next: [],
+    mood: 'heart',
+    hidden: true,
+    finale: true,
+    endings: true,
+    loopSeconds: 30,
+    labels: [
+      [2, 15, 'the warm hollow — lie down, and stay'],
+      [16, 11, 'the heart — break it, or cut it'],
+      [29, 15, 'the ninth door — be still, and let go'],
+    ],
+    story: [
+      'The beams stopped. The counting stopped. There was a door.',
+      'STAY, it said, with her voice.',
+      'A cat may open eight doors against the dark.',
+      'The ninth door opens both ways.',
+    ],
+    hint: 'break it, keep it, cut it — or stand at the ninth door, and be still',
+    atlas: [0, 0, 10, 10],
+    grid: [
+      '################################',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#..............................#',
+      '#...............E..............#',
+      '#..............###.............#',
+      '#..............................#',
+      '#..........##.......##.........#',
+      '#.O............S.............N.#',
+      '################################',
+      '################################',
+    ],
+  },
 ];
+
+export const BY_ID = Object.fromEntries(LEVELS.map((lv, i) => [lv.id, lv]));
+export const INDEX_OF = Object.fromEntries(LEVELS.map((lv, i) => [lv.id, i]));
 
 // Ending lines may contain {spent} — replaced with the lives spent overall.
 export const ENDINGS = {
@@ -609,6 +1337,32 @@ export const ENDINGS = {
     '',
     'NINE LIVES. FOREVER.',
   ],
+  wear: [
+    'You reached for the warm hollow, and the machine reached back.',
+    'It had carried your dead, as agreed. Now it asked for the face.',
+    '',
+    'You gave it. It fit. That is the terrible part — it fit.',
+    '{spent} lives spent, and the ninth worn like a mask, forever.',
+    '',
+    'Somewhere a bell rings on a schedule now.',
+    'Nothing about it is wrong. Nothing about it is a cat.',
+    '',
+    'THE LOOM — and the face it wears.',
+  ],
+  release: [
+    'The ninth night, the cat did not sit down on the threshold.',
+    'It stood up, and it opened the door.',
+    'The child went out. The morning came in. The mother slept,',
+    'and for the first time in a long time, so did the night.',
+    '',
+    '{spent} lives spent, and the ninth given freely —',
+    'the only way a ninth is ever spent.',
+    '',
+    'Somewhere above, on a low wall in the sun,',
+    'a bell rang once, small and clear, and was done.',
+    '',
+    'THE NINTH ECHO — let go, and gone home.',
+  ],
 };
 
 // The narrator's voice outside the chambers. Lowercase = the First Cat.
@@ -644,4 +1398,125 @@ export const NARRATOR = {
     'Nine of you walked toward the ember heart together.',
     'Go on, little one. It is waiting, and it wears my face.',
   ],
+  // shown at the ninth door when the telling is not whole
+  doorRefuse: 'the telling is not whole. the door knows.',
+};
+
+// The First Telling — eight nights of it are findable as bells; the ninth is
+// the hole in the narrator's memory, and can only be lived. Each night has a
+// child-side and a mother-side telling, chosen by the first Asking. Gold
+// UPPERCASE lines are the voices the machine now wears — Death's included.
+export const NIGHTS = {
+  1: {
+    title: 'NIGHT I — The Threshold',
+    cine: 'night1',
+    child: [
+      'Before the nine, there was one cat, one door, one child.',
+      'On the sixth night, Death came up the lane, counting.',
+      'The cat sat down on the threshold and did not move.',
+      'A LIFE FOR A NIGHT. A FAIR PRICE. I KEEP ALL THE FAIR PRICES.',
+      'The bell over the door rang once. The mother slept on.',
+    ],
+    mother: [
+      'Before the nine, there was one cat, one door, one child.',
+      'On the sixth night, Death came up the lane, counting.',
+      'The cat sat down on the threshold and did not move.',
+      'A LIFE FOR A NIGHT. A FAIR PRICE. I KEEP ALL THE FAIR PRICES.',
+      'The bell over the door rang once. The mother slept on.',
+    ],
+  },
+  2: {
+    title: 'NIGHT II — The Sill',
+    child: [
+      'The second night the child laughed in its sleep,',
+      'and the cat, one life lighter, sat closer than before.',
+      'It had begun to count the breaths between the bells.',
+    ],
+    mother: [
+      'The second night the mother woke and found the candle low,',
+      'and a black cat on the sill she did not remember letting in.',
+      'She let it stay. The house felt warmer with it watching.',
+    ],
+  },
+  3: {
+    title: 'NIGHT III — The Water and the Bells',
+    child: [
+      'The third night the rain came up through the floor of the world,',
+      'and Death came wading, patient as water.',
+      'The cat paid again. Small change, it told itself. Small change.',
+    ],
+    mother: [
+      'The third night she hung a bell over every door,',
+      'so that nothing could enter unannounced.',
+      'Nothing did. It was already inside, and it was purring.',
+    ],
+  },
+  4: {
+    title: 'NIGHT IV — What It Was Buying',
+    child: [
+      'The fourth night, the cat understood what it was buying.',
+      'Not the child. The child was leaving all the same.',
+      'It was buying the mother one more morning of not knowing,',
+      'and selling her the same grief back again each dusk.',
+    ],
+    mother: [
+      'The fourth night she cooked for three and set out two bowls,',
+      'one for the child, and one, low to the floor, for the watcher.',
+      'She had stopped asking what it was. She fed it. That was enough.',
+    ],
+  },
+  5: {
+    title: 'NIGHT V — The Song',
+    child: [
+      'The fifth night the child opened its eyes and looked,',
+      'not at its mother, but at the cat, and its look said:',
+      'I know what you are doing. I have not decided to forgive it.',
+    ],
+    mother: [
+      'The fifth night she sang to the child, and the cat learned the song.',
+      'A small falling tune, the kind you hum without knowing.',
+      'You have been hearing it this whole descent. Now you know.',
+    ],
+  },
+  6: {
+    title: 'NIGHT VI — The Step',
+    child: [
+      'The sixth night of the sixth week, Death sat down on the step',
+      'beside the cat, the way the tired sit with the tired.',
+      'IT IS NOT A CRUELTY. IT IS A COUNTING. NOTHING COUNTED IS LOST.',
+      'The cat did not answer. It paid.',
+    ],
+    mother: [
+      'The sixth night she caught the cat watching the door, and knew.',
+      'Mothers always know. She did not scream, or pray, or run.',
+      'She asked it, quietly, for one more night. And then another.',
+    ],
+  },
+  7: {
+    title: 'NIGHT VII — The Clock of Thread',
+    child: [
+      'The seventh night the child dreamed all its lives at once,',
+      'a tangle of mornings the counting would never let it reach.',
+      'The cat watched them go by like weather, and chose to stay.',
+    ],
+    mother: [
+      'The seventh night she stopped sleeping altogether.',
+      'She sat in the chair and wound thread to keep her hands quiet,',
+      'and the winding became the only clock the house obeyed.',
+    ],
+  },
+  8: {
+    title: 'NIGHT VIII — The Theft',
+    child: [
+      'The eighth night, the cat was thin as a door-crack. It paid.',
+      'The bell rang. One life left, and for the first time',
+      'it wondered who the ninth was for.',
+    ],
+    mother: [
+      'The eighth night she made her bargain with the strangers below,',
+      'the ones with the spindle, who promised her the trick entire.',
+      'They lied. They only ever had eight nights of it.',
+      'WE TOOK NOTHING THAT WAS BEING USED.',
+    ],
+  },
 };

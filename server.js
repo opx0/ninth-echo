@@ -4,7 +4,7 @@ import { Firestore } from '@google-cloud/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LEVELS, GAME_VERSION } from './public/src/levels.js';
+import { BY_ID, GAME_VERSION } from './public/src/levels.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -50,7 +50,8 @@ app.post('/api/clear', async (req, res) => {
   try {
     const { level, name, lives, ticks, ghosts, v } = req.body || {};
     if (v !== GAME_VERSION) return res.status(400).json({ error: 'version' });
-    if (!Number.isInteger(level) || level < 0 || level >= LEVELS.length) return res.status(400).json({ error: 'level' });
+    const lv = typeof level === 'string' ? BY_ID[level] : null;
+    if (!lv || lv.interlude || lv.hidden) return res.status(400).json({ error: 'level' });
     if (typeof name !== 'string' || !NAME_RE.test(name)) return res.status(400).json({ error: 'name' });
     if (!Number.isInteger(lives) || lives < 1 || lives > 9) return res.status(400).json({ error: 'lives' });
     if (!Number.isInteger(ticks) || ticks < 30 || ticks > 9000 * 10) return res.status(400).json({ error: 'ticks' });
@@ -70,8 +71,9 @@ app.post('/api/clear', async (req, res) => {
 // Top clears for a level (best = fewest lives, then fewest ticks) + recent runs.
 app.get('/api/board/:level', async (req, res) => {
   try {
-    const level = parseInt(req.params.level, 10);
-    if (!Number.isInteger(level) || level < 0 || level >= LEVELS.length) return res.status(400).json({ error: 'level' });
+    const level = String(req.params.level);
+    const lv = BY_ID[level];
+    if (!lv || lv.interlude || lv.hidden) return res.status(400).json({ error: 'level' });
     const all = await loadClears(level, GAME_VERSION);
     all.sort((a, b) => a.lives - b.lives || a.ticks - b.ticks);
     const top = all.slice(0, 8).map(({ name, lives, ticks }) => ({ name, lives, ticks }));

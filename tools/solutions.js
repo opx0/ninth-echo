@@ -142,6 +142,138 @@ export const SOLUTIONS = {
     [{ to: [10, 11] }, { to: [21, 16] }, { to: [13, 16] }],
   ],
 
+  // Asking rooms: flat floors, one door on each end. The proof walks left.
+  'THE ASKING': [
+    [{ to: [2, 15] }],
+  ],
+  'THE SECOND ASKING': [
+    [{ to: [2, 15] }],
+  ],
+
+  // Memory tiles in order along the floor, then up the right steps to the
+  // fourth, and out through the door the room opens for a good memory.
+  'HUSH': [
+    [
+      { to: [6, 15] }, { to: [12, 15] }, { to: [18, 15] },
+      { to: [20, 13] }, { to: [25, 11] },
+      { to: [28, 15] }, { to: [30, 15] },
+    ],
+  ],
+
+  // The loop starts dry: off the ledge and straight down the tunnel before
+  // the half-loop floods it.
+  'FONT': [
+    [{ to: [8, 15] }, { to: [15, 15] }, { to: [25, 15] }, { to: [29, 15] }],
+  ],
+
+  // Interlude: off the entry ledge onto the long shelf, off its end onto the
+  // right ledge, then back left into the throat, which drops you to the hall.
+  'THE TOLL': [
+    [{ to: [12, 4] }, { to: [22, 8] }, { to: [16, 15] }, { to: [10, 15] }],
+  ],
+
+  // Ring low (up the left pillar to the shelf), then far (the floor), park;
+  // the echo replays both while the cat climbs the right stair to ring high.
+  'KNELL': [
+    [
+      { to: [8, 13] }, { to: [4, 11] },
+      { to: [11, 15] }, { to: [14, 15] }, { hold: 30 },
+    ],
+    [
+      { to: [20, 15] }, { to: [22, 13] }, { to: [24, 11] }, { to: [26, 9] },
+      { to: [23, 7] }, { to: [21, 7] },
+      { to: [29, 15] }, { to: [30, 15] },
+    ],
+  ],
+
+  // WEIGHT with a warden over it: box 1 into the plate gap, wait out the
+  // first strike, box 2 flush to the wall, over the top between sweeps.
+  'LARDER': [
+    [
+      { to: [4, 15] }, { face: 1 }, { hold: 110 }, { face: 0 },
+      { wait_until: 260 },
+      { to: [12, 15] }, { face: 1 }, { hold: 130 }, { face: 0 },
+      { to: [19, 14] }, { to: [20, 12] },
+      { wait_until: 560 },
+      { to: [24, 15] }, { to: [28, 15] }, { to: [30, 15] },
+    ],
+  ],
+
+  // Solo by design — the Loom is holding the echoes. Box onto the plate,
+  // over the spikes, through the door.
+  'THE TITHE': [
+    [
+      { to: [5, 15] }, { face: 1 }, { hold: 70 }, { face: 0 },
+      { to: [13, 15] }, { to: [18, 15] }, { to: [25, 15] }, { to: [29, 15] },
+    ],
+  ],
+
+  // Five seals: two floor echoes, two shelf echoes, then the box on the
+  // fifth and the run through the door.
+  'THE LONG WAY': [
+    [{ to: [5, 15] }, { hold: 20 }],
+    [{ to: [15, 15] }, { hold: 20 }],
+    [{ to: [6, 13] }, { to: [10, 11] }, { hold: 20 }],
+    [{ to: [13, 15] }, { to: [16, 13] }, { to: [18, 11] }, { to: [20, 11] }, { hold: 20 }],
+    [
+      { to: [19, 15] }, { face: 1 }, { hold: 70 }, { face: 0 },
+      { to: [25, 15] }, { to: [28, 15] }, { to: [29, 15] },
+    ],
+  ],
+
+  // The plate is under the water. The first life stands on it and the pool
+  // keeps it; the second crosses while its breath still holds the door.
+  'SHALLOWS': [
+    { steps: [{ to: [15, 15] }, { hold: 420, budget: 500 }], sacrificial: true },
+    [{ to: [22, 15] }, { to: [27, 15] }, { to: [29, 15] }],
+  ],
+
+  // Hold right for the whole loop: the mirrored echo walks left instead and
+  // wedges itself over the far plate forever. Then walk through the glass.
+  'OTHER-SIDE': [
+    [{ face: 1 }, { hold: 860, budget: 900 }],
+    [{ wait_until: 200 }, { to: [20, 15] }, { to: [26, 15] }, { to: [29, 15] }],
+  ],
+
+  // Move between the counts, be nothing on them. Each leg fits a window.
+  'THE COUNTING ROOM': [
+    [
+      { wait_until: 10 }, { to: [8, 15] },
+      { wait_until: 130 }, { to: [14, 15] },
+      { wait_until: 250 }, { to: [18, 15] },
+      { wait_until: 370 }, { to: [24, 15] },
+      { wait_until: 490 }, { to: [29, 15] },
+    ],
+  ],
+
+  // Memory tiles with a gaze between the second and third.
+  'SPINDLE': [
+    [
+      { to: [6, 15] }, { to: [14, 15] },
+      { wait_until: 300 }, { to: [22, 15] },
+      { to: [27, 15] }, { to: [30, 15] },
+    ],
+  ],
+
+  // A walk. That is the point of it.
+  'THE NURSERY': [
+    [{ to: [15, 15] }, { to: [28, 15] }],
+  ],
+
+  // Phase two: park a seal echo clear of the gaze, walk the second through
+  // the beam window with the count underfoot, then run the door.
+  'THE SHUTTLE': [
+    [{ wait_until: 10 }, { to: [7, 15] }, { hold: 800, budget: 900 }],
+    [{ wait_until: 200 }, { to: [11, 15] }, { to: [17, 15] }, { to: [21, 15] }, { hold: 500, budget: 600 }],
+    [{ wait_until: 200 }, { to: [11, 15] }, { to: [18, 15] }, { to: [24, 15] }, { to: [27, 15] }, { to: [29, 15] }],
+  ],
+
+  // Phase three: the proof takes the heart. The ninth door asks for a
+  // stillness no bot is written to hold.
+  'THE NINTH DOOR': [
+    [{ to: [11, 13] }, { to: [16, 11] }],
+  ],
+
   // Three seals held at once, two of them under the gaze. Lethal windows (50..94
   // after each telegraph): cols 12/13 at 120-164, 400-444, 740-784; cols 17/18 at
   // 200-244, 480-524, 770-814; cols 19/20 at 280-324, 550-594, 840-884.

@@ -7,6 +7,7 @@ export const L = 1, R = 2, J = 4;
 const ACCEL_G = 0.65, ACCEL_A = 0.45, MAXV = 3.1;
 const GRAV = 0.36, JUMPV = -7.7, MAXFALL = 9.5;
 const COYOTE = 6, BUFFER = 7;
+const BREATH = 240;   // ticks a head can stay under before the water keeps it
 
 export class Actor {
   constructor(world, ghost = false) {
@@ -30,6 +31,7 @@ export class Actor {
     this.squash = 0;        // >0 right after landing
     this.idleT = 0;         // ticks standing still on the ground (render-only)
     this.deathT = 0;
+    this.breath = 0;        // ticks with the head underwater
   }
 
   onGround() {
@@ -43,13 +45,16 @@ export class Actor {
     if (!this.alive) { this.deathT++; return ev; }
     if (this.frozen) { this.phase += 0.02; this.idleT++; return ev; }
     const w = this.world;
+    // water: feet under the surface slows everything; a head under it counts
+    const wet = w.inWater ? w.inWater(this) : false;
+    const maxv = wet ? MAXV * 0.55 : MAXV;
 
     // horizontal
     const dir = ((mask & R) ? 1 : 0) - ((mask & L) ? 1 : 0);
     const acc = this.grounded ? ACCEL_G : ACCEL_A;
     if (dir !== 0) {
       this.vx += dir * acc;
-      this.vx = Math.max(-MAXV, Math.min(MAXV, this.vx));
+      this.vx = Math.max(-maxv, Math.min(maxv, this.vx));
       this.face = dir;
     } else {
       this.vx *= this.grounded ? 0.72 : 0.9;
@@ -77,7 +82,7 @@ export class Actor {
     this.x = nx;
 
     // vertical
-    this.vy = Math.min(this.vy + GRAV, MAXFALL);
+    this.vy = Math.min(this.vy + (wet ? GRAV * 0.4 : GRAV), wet ? 2.4 : MAXFALL);
     const wasGrounded = this.grounded;
     let ny = this.y + this.vy;
     let landedNow = false;
@@ -107,7 +112,7 @@ export class Actor {
     if (jumpDown && !this.jumpHeld) this.buffer = BUFFER;
     else if (this.buffer > 0) this.buffer--;
     if (this.buffer > 0 && this.coyote > 0) {
-      this.vy = JUMPV;
+      this.vy = wet ? JUMPV * 0.72 : JUMPV;
       this.buffer = 0; this.coyote = 0;
       this.grounded = false;
       this.cutDone = false;
@@ -118,6 +123,11 @@ export class Actor {
       this.cutDone = true;
     }
     this.jumpHeld = jumpDown;
+
+    // breath: only a submerged HEAD counts, and the water keeps what it wins
+    if (w.inWater && w.inWater(this, true)) {
+      if (++this.breath >= BREATH) { this.die(); return ev; }
+    } else this.breath = 0;
 
     // animation clock
     this.phase += this.grounded && Math.abs(this.vx) > 0.3 ? 0.35 : 0.06;
